@@ -1,0 +1,335 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Authorized application user profile keyed by Firebase UID",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "Stable external ID from access list",
+          "maxLength": 128
+        },
+        "name": {
+          "type": "string",
+          "description": "User display name",
+          "maxLength": 200
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Normalized lowercase email address",
+          "maxLength": 256
+        },
+        "role": {
+          "type": "string",
+          "description": "Application role",
+          "enum": ["User", "Admin", "Main Admin"]
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether the user has active access"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when user was created"
+        },
+        "createdBy": {
+          "type": "string",
+          "description": "UID of creator or system",
+          "maxLength": 128
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when user was last updated"
+        },
+        "updatedBy": {
+          "type": "string",
+          "description": "UID of updater or system",
+          "maxLength": 128
+        }
+      },
+      "required": ["userId", "name", "email", "role", "enabled"]
+    },
+    "AllowlistEntry": {
+      "title": "AllowlistEntry",
+      "description": "Email access eligibility entry keyed by normalized email hash or safe email key",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Normalized lowercase email address",
+          "maxLength": 256
+        },
+        "name": {
+          "type": "string",
+          "description": "Name from imported access list",
+          "maxLength": 200
+        },
+        "externalId": {
+          "type": "string",
+          "description": "Stable identifier from access list",
+          "maxLength": 128
+        },
+        "role": {
+          "type": "string",
+          "description": "Allowed role",
+          "enum": ["User", "Admin", "Main Admin"]
+        },
+        "enabled": {
+          "type": "boolean",
+          "description": "Access allowed or revoked"
+        },
+        "uid": {
+          "type": "string",
+          "description": "Firebase UID after first sign-in",
+          "maxLength": 128
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Update timestamp"
+        }
+      },
+      "required": ["email", "name", "externalId", "role", "enabled"]
+    },
+    "UniqueIdIndex": {
+      "title": "UniqueIdIndex",
+      "description": "Uniqueness index mapping external ID to email",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Normalized lowercase email",
+          "maxLength": 256
+        },
+        "uid": {
+          "type": "string",
+          "description": "Firebase UID",
+          "maxLength": 128
+        }
+      },
+      "required": ["email"]
+    },
+    "KbMeta": {
+      "title": "KbMeta",
+      "description": "Active KB version pointer and workbook metadata",
+      "type": "object",
+      "properties": {
+        "activeVersionId": {
+          "type": "string",
+          "description": "ID of currently active version",
+          "maxLength": 128
+        },
+        "publishedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Timestamp when published"
+        },
+        "publishedBy": {
+          "type": "string",
+          "description": "UID of user who published",
+          "maxLength": 128
+        },
+        "fileName": {
+          "type": "string",
+          "description": "Source filename",
+          "maxLength": 256
+        },
+        "totalChunks": {
+          "type": "number",
+          "description": "Total number of chunks in active version"
+        }
+      },
+      "required": ["activeVersionId", "publishedAt"]
+    },
+    "KbChunk": {
+      "title": "KbChunk",
+      "description": "Chunked tab grid and case records",
+      "type": "object",
+      "properties": {
+        "versionId": {
+          "type": "string",
+          "description": "Version ID this chunk belongs to",
+          "maxLength": 128
+        },
+        "tabIndex": {
+          "type": "number",
+          "description": "Index of the sheet tab"
+        },
+        "tabName": {
+          "type": "string",
+          "description": "Name of sheet tab",
+          "maxLength": 200
+        },
+        "kind": {
+          "type": "string",
+          "description": "Tab kind",
+          "enum": ["cases", "table"]
+        },
+        "chunkIndex": {
+          "type": "number",
+          "description": "Index of this chunk within tab"
+        },
+        "totalChunks": {
+          "type": "number",
+          "description": "Total chunks for this tab"
+        },
+        "checksum": {
+          "type": "string",
+          "description": "Chunk payload verification hash",
+          "maxLength": 128
+        }
+      },
+      "required": ["versionId", "tabIndex", "tabName", "kind", "chunkIndex", "totalChunks"]
+    },
+    "Member": {
+      "title": "Member",
+      "description": "Company employee registration record for promotion discovery",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Normalized company email",
+          "maxLength": 200
+        },
+        "name": {
+          "type": "string",
+          "description": "Employee display name",
+          "maxLength": 200
+        },
+        "firstSeenAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "First sign-in ISO timestamp"
+        },
+        "lastSeenAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Last sign-in ISO timestamp"
+        }
+      },
+      "required": ["email", "name", "firstSeenAt", "lastSeenAt"]
+    },
+    "Admin": {
+      "title": "Admin",
+      "description": "Granted administrator role record",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Normalized company admin email",
+          "maxLength": 200
+        },
+        "grantedBy": {
+          "type": "string",
+          "format": "email",
+          "description": "Email of admin who granted access",
+          "maxLength": 200
+        },
+        "grantedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Grant ISO timestamp"
+        }
+      },
+      "required": ["email", "grantedBy", "grantedAt"]
+    },
+    "Blocked": {
+      "title": "Blocked",
+      "description": "Blocked user access revocation record",
+      "type": "object",
+      "properties": {
+        "email": {
+          "type": "string",
+          "format": "email",
+          "description": "Blocked user email",
+          "maxLength": 200
+        },
+        "blockedBy": {
+          "type": "string",
+          "format": "email",
+          "description": "Email of admin who blocked",
+          "maxLength": 200
+        },
+        "blockedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Block ISO timestamp"
+        }
+      },
+      "required": ["email", "blockedBy", "blockedAt"]
+    },
+    "AuditLog": {
+      "title": "AuditLog",
+      "description": "Privileged operation audit entry",
+      "type": "object",
+      "properties": {
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Event timestamp"
+        },
+        "actorUid": {
+          "type": "string",
+          "description": "UID of user performing action",
+          "maxLength": 128
+        },
+        "actorEmail": {
+          "type": "string",
+          "format": "email",
+          "description": "Email of actor",
+          "maxLength": 256
+        },
+        "action": {
+          "type": "string",
+          "description": "Action performed",
+          "maxLength": 128
+        },
+        "targetId": {
+          "type": "string",
+          "description": "Target ID or email if applicable",
+          "maxLength": 256
+        }
+      },
+      "required": ["timestamp", "actorUid", "actorEmail", "action"]
+    }
+  },
+  "firestore": {
+    "/members/{email}": {
+      "schema": "Member",
+      "description": "Company member registrations"
+    },
+    "/admins/{email}": {
+      "schema": "Admin",
+      "description": "Granted administrators"
+    },
+    "/blocked/{email}": {
+      "schema": "Blocked",
+      "description": "Blocked offboarded accounts"
+    },
+    "/meta/{metaId}": {
+      "schema": "KbMeta",
+      "description": "Active KB version pointer"
+    },
+    "/kbVersions/{versionId}/chunks/{chunkId}": {
+      "schema": "KbChunk",
+      "description": "Chunked KB storage"
+    },
+    "/auditLogs/{logId}": {
+      "schema": "AuditLog",
+      "description": "Administrative audit trail"
+    }
+  }
+}

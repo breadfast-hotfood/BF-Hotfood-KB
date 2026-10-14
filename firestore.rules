@@ -1,0 +1,164 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Startup health check document.
+    match /test/connection {
+      allow get: if true;
+      allow write: if false;
+    }
+
+    // ------------------------------------------------------------------
+    // Identity helpers
+    // ------------------------------------------------------------------
+
+    // Google sign-in only, with a verified email.
+    function isSignedIn() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+
+    function callerEmail() {
+      return request.auth.token.email.lower();
+    }
+
+    // The ONLY non-company account that has access: the Main Admin. Fixed in the rules.
+    function isMainAdmin() {
+      return isSignedIn() && callerEmail() == 'breadfast.hotfood@gmail.com';
+    }
+
+    // Exactly name@breadfast.com (no sub-domains, no look-alike domains).
+    function isCompanyEmail(e) {
+      return e.matches('[^@]+@breadfast[.]com');
+    }
+
+    // Main Admin can block a company email (offboarding).
+    function isBlocked() {
+      return exists(/databases/$(database)/documents/blocked/$(callerEmail()));
+    }
+
+    // Anyone with a verified @breadfast.com Google account who is not blocked.
+    function isCompanyUser() {
+      return isSignedIn() && isCompanyEmail(callerEmail()) && !isBlocked();
+    }
+
+    // Can read the KB.
+    function isMember() {
+      return isMainAdmin() || isCompanyUser();
+    }
+
+    // Can publish the KB and manage admins: Main Admin, or a company user who has an admins/{email} document.
+    function isAdmin() {
+      return isMainAdmin()
+        || (isCompanyUser() && exists(/databases/$(database)/documents/admins/$(callerEmail())));
+    }
+
+    // ------------------------------------------------------------------
+    // Knowledge base: read by every member, written by admins
+    // ------------------------------------------------------------------
+
+    match /meta/{metaId} {
+      allow read: if isMember();
+      allow write: if isAdmin();
+    }
+
+    match /kbVersions/{versionId} {
+      allow read: if isMember();
+      allow write: if isAdmin();
+
+      match /chunks/{chunkId} {
+        allow read: if isMember();
+        allow write: if isAdmin();
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // members/{email}: every company user registers THEIR OWN record when they sign in.
+    // It exists only so admins can pick people to promote. It grants no access and no role.
+    // ------------------------------------------------------------------
+
+    match /members/{target} {
+      allow read: if isAdmin();
+      allow get: if isSignedIn() && callerEmail() == target;
+
+      allow create: if isCompanyUser()
+        && callerEmail() == target
+        && request.resource.data.keys().hasOnly(['email', 'name', 'firstSeenAt', 'lastSeenAt'])
+        && request.resource.data.keys().hasAll(['email', 'name', 'firstSeenAt', 'lastSeenAt'])
+        && request.resource.data.email == target
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 200
+        && request.resource.data.firstSeenAt is string
+        && request.resource.data.lastSeenAt is string;
+
+      allow update: if isCompanyUser()
+        && callerEmail() == target
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'lastSeenAt'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 200
+        && request.resource.data.lastSeenAt is string;
+
+      allow delete: if isMainAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // admins/{email}: the document EXISTS = that company email is an Admin.
+    // Admins and the Main Admin can grant and revoke. Nobody can create or delete the Main Admin entry.
+    // ------------------------------------------------------------------
+
+    match /admins/{target} {
+      allow read: if isAdmin();
+      allow get: if isSignedIn() && callerEmail() == target;
+
+      allow create: if isAdmin()
+        && target == target.lower()
+        && isCompanyEmail(target)
+        && request.resource.data.keys().hasOnly(['email', 'grantedBy', 'grantedAt'])
+        && request.resource.data.keys().hasAll(['email', 'grantedBy', 'grantedAt'])
+        && request.resource.data.email == target
+        && request.resource.data.grantedBy == callerEmail()
+        && request.resource.data.grantedAt is string;
+
+      allow update: if false;
+
+      allow delete: if isAdmin()
+        && target != 'breadfast.hotfood@gmail.com';
+    }
+
+    // ------------------------------------------------------------------
+    // blocked/{email}: Main Admin manages blocks. Authorized admins can read/list.
+    // A blocked company email loses all access immediately.
+    // ------------------------------------------------------------------
+
+    match /blocked/{target} {
+      allow read: if isAdmin();
+
+      allow create: if isMainAdmin()
+        && target == target.lower()
+        && target != 'breadfast.hotfood@gmail.com'
+        && target.matches('[^@/]+@[^@/]+')
+        && request.resource.data.keys().hasOnly(['email', 'blockedBy', 'blockedAt'])
+        && request.resource.data.keys().hasAll(['email', 'blockedBy', 'blockedAt'])
+        && request.resource.data.email == target
+        && request.resource.data.blockedBy == callerEmail()
+        && request.resource.data.blockedAt is string;
+
+      allow update: if false;
+      allow delete: if isMainAdmin();
+    }
+
+    // ------------------------------------------------------------------
+    // Audit log: written and read by admins only; entries cannot be edited or deleted.
+    // ------------------------------------------------------------------
+
+    match /auditLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAdmin()
+        && request.resource.data.actorEmail == callerEmail();
+      allow update, delete: if false;
+    }
+  }
+}

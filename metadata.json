@@ -1,0 +1,7 @@
+{
+  "name": "Breadfast CX Knowledge Base",
+  "description": "Internal CX knowledge base with Firebase-backed storage, Google sign-in, email access control, and admin management.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

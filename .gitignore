@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+coverage/
+.env*
+!.env.example
+*.log
+.DS_Store
+
+# Never commit data files: the knowledge base lives in Firestore, not in this repository.
+*.xlsx
+*.xls
+*.csv
+*.xlsm
+server-state.json
