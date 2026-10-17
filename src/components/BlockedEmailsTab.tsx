@@ -7,7 +7,7 @@ import {
   blockEmail,
   unblockEmail,
 } from '../utils/adminManagementRest';
-import { MAIN_ADMIN_EMAIL } from '../utils/accessPayloads';
+import { isMainAdminAddress } from '../utils/accessPayloads';
 import {
   Ban,
   UserX,
@@ -73,8 +73,8 @@ export const BlockedEmailsTab: React.FC<BlockedEmailsTabProps> = ({ currentUser,
     const emailToBlock = newEmail.trim().toLowerCase();
     if (!emailToBlock) return;
 
-    if (emailToBlock === MAIN_ADMIN_EMAIL.toLowerCase()) {
-      setErrorMsg('Cannot block the Main Admin anchor.');
+    if (isMainAdminAddress(emailToBlock)) {
+      setErrorMsg('The Main Admin cannot be blocked.');
       return;
     }
 

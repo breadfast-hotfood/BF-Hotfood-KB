@@ -7,7 +7,7 @@ export interface AuthUser {
   enabled: boolean;
 }
 
-export type AuthStatus = 'loading' | 'unauthenticated' | 'unauthorized' | 'authorized';
+export type AuthStatus = 'loading' | 'unauthenticated' | 'unauthorized' | 'authorized' | 'error';
 
 export interface GridCell {
   v?: string;

@@ -24,6 +24,7 @@ export interface LocalApiOptions {
   fetchImpl?: typeof fetch;
   sample: () => Workbook & { publishedAt?: string };
   now?: () => Date;
+  sleep?: (ms: number) => Promise<void>;
 }
 export interface ApiRequest { method: string; path: string; authorization?: string; body?: any }
 export interface ApiResponse { status: number; json: any }
@@ -48,13 +49,13 @@ export function decodeJwtPayload(token: string): any {
 
 export function createLocalApi(opts: LocalApiOptions) {
   const now = opts.now ?? (() => new Date());
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const fs = createFirestoreRest({ projectId: opts.projectId, databaseId: opts.databaseId }, opts.fetchImpl);
 
   function verify(authorization?: string) {
     if (!authorization || !authorization.startsWith('Bearer ')) throw new HttpError(401, 'Missing or malformed Authorization header');
     const token = authorization.slice(7).trim();
     const d = decodeJwtPayload(token);
-    if (typeof d.exp === 'number' && d.exp * 1000 < now().getTime()) throw new HttpError(401, 'ID token expired, please sign in again');
     if (d.firebase?.sign_in_provider !== 'google.com') throw new HttpError(403, 'Forbidden: only Google OAuth 2.0 authentication is accepted');
     if (d.email_verified !== true) throw new HttpError(403, 'Forbidden: Google account email must be verified');
     const email = String(d.email || '').trim().toLowerCase();
@@ -66,7 +67,10 @@ export function createLocalApi(opts: LocalApiOptions) {
     if (!COMPANY_RE.test(email)) return { isAdmin: false, isMainAdmin: false, role: 'Unauthorized' };
     const r = await fs.get(`admins/${encodeURIComponent(email)}`, token);
     if (r.found) return { isAdmin: true, isMainAdmin: false, role: 'Admin' };
-    return { isAdmin: false, isMainAdmin: false, role: 'User' };
+    if (r.status === 401) throw new HttpError(401, 'ID token rejected, please retry');
+    if (r.status === 404 || r.status === 403) return { isAdmin: false, isMainAdmin: false, role: 'User' };
+    // 0 (network), 429 (rate limit), 5xx: do not guess. A wrong guess would demote an Admin or reject a valid user.
+    throw new HttpError(503, `Temporary problem while checking your role (HTTP ${r.status}). Please retry.`);
   }
 
   async function audit(uid: string, email: string, action: string, details: Record<string, any>, token: string) {
@@ -95,10 +99,13 @@ export function createLocalApi(opts: LocalApiOptions) {
         return { status: 200, json: { authorized: false, reason: 'unauthorized_domain', email, name: decoded.name || '', message: 'Access restricted to @breadfast.com accounts.' } };
       }
       // Probe: a blocked company account is refused by the rules when it reads the KB pointer.
-      const probe = await fs.get('meta/kb', token);
+      let probe = await fs.get('meta/kb', token);
+      if (probe.status === 403) { await sleep(700); probe = await fs.get('meta/kb', token); } // confirm before blocking
+      if (probe.status === 401) throw new HttpError(401, 'ID token rejected, please retry');
       if (probe.status === 403) {
         return { status: 200, json: { authorized: false, reason: 'blocked', email, name: decoded.name || '', message: 'Your access has been disabled, contact the Main Admin.' } };
       }
+      if (probe.status !== 200 && probe.status !== 404) throw new HttpError(503, `Temporary problem while checking access (HTTP ${probe.status}). Please retry.`);
       const priv = await privilege(email, token);
       return { status: 200, json: { authorized: true, user: { uid, userId: email, name: decoded.name || 'Breadfast Employee', email, role: priv.isAdmin ? 'Admin' : 'User', enabled: true } } };
     } catch (e: any) {
@@ -129,7 +136,7 @@ export function createLocalApi(opts: LocalApiOptions) {
 
   async function kbUpload(req: ApiRequest): Promise<ApiResponse> {
     try {
-      const { token, email, uid } = verify(req.authorization);
+      const { token, email, uid, decoded } = verify(req.authorization);
       const priv = await privilege(email, token);
       if (!priv.isAdmin) return { status: 403, json: { error: 'Forbidden: only Admins can publish Knowledge Base versions.' } };
 
@@ -153,7 +160,7 @@ export function createLocalApi(opts: LocalApiOptions) {
         }
       } catch { /* non-blocking */ }
 
-      const pub = await publishWorkbook({ fs, token, workbook, fileName: fileName || workbook.fileName, actor: { uid, email } });
+      const pub = await publishWorkbook({ fs, token, workbook, fileName: fileName || workbook.fileName, actor: { uid, email, name: decoded.name || '' }, now: () => now().toISOString() });
       if (!pub.ok) return { status: 500, json: { error: pub.error || 'Publishing failed.', details: pub.details } };
 
       await audit(uid, email, 'KB_VERSION_PUBLISHED', { versionId: pub.versionId, fileName: fileName || workbook.fileName, totalTabs: workbook.tabs.length, totalRecords: pub.totalRecords, totalChunks: pub.totalChunks, versionChecksum: pub.versionChecksum }, token);
@@ -173,12 +180,14 @@ export function createLocalApi(opts: LocalApiOptions) {
       if (!priv.isAdmin) return { status: 403, json: { error: 'Forbidden: only Admins can view version history.' } };
 
       const versions: any[] = [];
+      const ptr = await fs.get('meta/kb', token);
+      const activeId: string | null = ptr.found ? (ptr.data?.activeVersionId || null) : null;
       (await listVersions(token))
         .filter((d) => ['active', 'published', 'staging'].includes(d.status))
         .sort((a, b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime())
         .slice(0, 10)
         .forEach((d) => versions.push({
-          versionId: d.versionId, fileName: d.fileName, status: d.status, publishedAt: d.publishedAt || null, publishedBy: d.publishedBy || '',
+          versionId: d.versionId, fileName: d.fileName, status: d.status, isActive: !!activeId && d.versionId === activeId, publishedAt: d.publishedAt || null, publishedBy: d.publishedBy || '', publishedByName: d.publishedByName || '', lastActivatedAt: d.lastActivatedAt || null, lastActivatedBy: d.lastActivatedBy || '', lastActivatedByName: d.lastActivatedByName || '',
           totalTabs: d.totalTabs || 0, totalRecords: d.totalRecords || 0, totalChunks: d.totalChunks || 1, versionChecksum: d.versionChecksum || '', tabNames: d.tabNames || [],
         }));
 
@@ -186,7 +195,7 @@ export function createLocalApi(opts: LocalApiOptions) {
       versions.push({
         versionId: s.versionId, fileName: s.fileName, status: 'published', publishedAt: s.publishedAt || null, publishedBy: 'System Sample',
         totalTabs: s.tabs.length, totalRecords: s.tabs.reduce((acc, t) => acc + (t.kb?.records?.length || 0), 0), totalChunks: 1,
-        tabNames: s.tabs.map((t) => t.name), isDefault: true, isSample: true,
+        tabNames: s.tabs.map((t) => t.name), isDefault: true, isSample: true, isActive: !activeId || activeId === s.versionId,
       });
       return { status: 200, json: { versions } };
     } catch (e: any) {
@@ -196,7 +205,7 @@ export function createLocalApi(opts: LocalApiOptions) {
 
   async function kbRollback(req: ApiRequest): Promise<ApiResponse> {
     try {
-      const { token, email, uid } = verify(req.authorization);
+      const { token, email, uid, decoded } = verify(req.authorization);
       const priv = await privilege(email, token);
       if (!priv.isAdmin) return { status: 403, json: { error: 'Forbidden: only Admins can rollback Knowledge Base versions.' } };
 
@@ -221,7 +230,7 @@ export function createLocalApi(opts: LocalApiOptions) {
         }
       }
 
-      const metaUpdate: Record<string, any> = { activeVersionId: targetVersionId, fileName: targetFileName, rolledBackAt: now().toISOString(), rolledBackBy: email };
+      const metaUpdate: Record<string, any> = { activeVersionId: targetVersionId, fileName: targetFileName, rolledBackAt: now().toISOString(), rolledBackBy: email, rolledBackByName: decoded.name || '' };
       if (vData) {
         if (vData.totalTabs) metaUpdate.totalTabs = vData.totalTabs;
         if (vData.totalRecords) metaUpdate.totalRecords = vData.totalRecords;
@@ -229,6 +238,7 @@ export function createLocalApi(opts: LocalApiOptions) {
         if (vData.versionChecksum) metaUpdate.versionChecksum = vData.versionChecksum;
       }
       await fs.write('meta/kb', metaUpdate, token, { merge: true });
+      if (vData) { try { await fs.write(`kbVersions/${targetVersionId}`, { lastActivatedAt: now().toISOString(), lastActivatedBy: email, lastActivatedByName: decoded.name || '' }, token, { merge: true }); } catch { /* history note only */ } }
       await audit(uid, email, 'KB_VERSION_ROLLEDBACK', { targetVersionId, targetFileName }, token);
       return { status: 200, json: { success: true, message: `Successfully rolled back active Knowledge Base to version ${targetVersionId}`, activeVersionId: targetVersionId, fileName: targetFileName } };
     } catch (e: any) {
@@ -236,7 +246,21 @@ export function createLocalApi(opts: LocalApiOptions) {
     }
   }
 
+  async function kbPointer(req: ApiRequest): Promise<ApiResponse> {
+    try {
+      const { token, email } = verify(req.authorization);
+      if (email !== MAIN_ADMIN_EMAIL && !COMPANY_RE.test(email)) return { status: 403, json: { error: 'Access denied: account not authorized to view KB data.' } };
+      const r = await fs.get('meta/kb', token);
+      if (r.status === 404) return { status: 200, json: { activeVersionId: null, versionChecksum: null } };
+      if (!r.found) return { status: r.status === 403 ? 403 : 503, json: { error: `Could not read the KB pointer (HTTP ${r.status}).` } };
+      return { status: 200, json: { activeVersionId: r.data?.activeVersionId || null, versionChecksum: r.data?.versionChecksum || null } };
+    } catch (e: any) {
+      return { status: e.status || 503, json: { error: e.message || 'Could not read the KB pointer' } };
+    }
+  }
+
   const routes: Record<string, (r: ApiRequest) => Promise<ApiResponse>> = {
+    'GET /api/kb/pointer': kbPointer,
     'GET /api/auth/me': authMe,
     'POST /api/auth/bootstrap': authBootstrap,
     'GET /api/kb/active': kbActive,

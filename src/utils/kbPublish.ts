@@ -11,7 +11,7 @@ export interface PublishInput {
   token: string;
   workbook: any;                       // { tabs, fileName }
   fileName?: string;
-  actor: { uid: string; email: string };
+  actor: { uid: string; email: string; name?: string };
   versionId?: string;
   now?: () => string;
 }
@@ -50,7 +50,7 @@ export async function publishWorkbook(inp: PublishInput): Promise<PublishResult>
   // STAGE 1
   try {
     await fs.write(`kbVersions/${versionId}`, {
-      versionId, fileName, status: 'staging', publishedAt: nowIso, publishedBy: actor.email, publishedByUid: actor.uid,
+      versionId, fileName, status: 'staging', publishedAt: nowIso, publishedBy: actor.email, publishedByUid: actor.uid, publishedByName: actor.name || '',
       totalTabs: workbook.tabs.length, totalRecords, totalChunks: chunks.length, maxChunkByteSize: MAX_CHUNK_BYTE_SIZE,
       chunkChecksums, versionChecksum, tabNames: workbook.tabs.map((t: any) => t.name),
     }, token);
@@ -80,7 +80,7 @@ export async function publishWorkbook(inp: PublishInput): Promise<PublishResult>
 
   // STAGE 3: activate (only now does /meta/kb change)
   await fs.write('meta/kb', {
-    activeVersionId: versionId, fileName, publishedAt: nowIso, publishedBy: actor.email, totalTabs: workbook.tabs.length,
+    activeVersionId: versionId, fileName, publishedAt: nowIso, publishedBy: actor.email, publishedByName: actor.name || '', totalTabs: workbook.tabs.length,
     totalRecords, totalChunks: chunks.length, versionChecksum,
   }, token);
   await fs.write(`kbVersions/${versionId}`, { status: 'active' }, token, { merge: true });

@@ -55,7 +55,7 @@ const wbOf = (names: string[], n = 8) => ({ fileName: 'upload.xlsx', tabs: names
 
 function setup(deny?: Deny) {
   const fk = fakeFirestore(deny);
-  const api = createLocalApi({ projectId: 'p', databaseId: 'd', fetchImpl: fk.fetch, sample: () => SAMPLE_KB, now: () => NOW });
+  const api = createLocalApi({ projectId: 'p', databaseId: 'd', fetchImpl: fk.fetch, sample: () => SAMPLE_KB, now: () => NOW, sleep: async () => {} });
   const call = (method: string, path: string, authorization?: string, body?: any) => api.handle({ method, path, authorization, body });
   return { fk, call };
 }
@@ -68,9 +68,9 @@ let n = 0; const ok = (m: string) => { n++; console.log('  ✓', m); };
   assert.equal((await call('GET', '/api/auth/me', 'Bearer not.a.jwt')).status, 401);
   assert.equal((await call('GET', '/api/auth/me', tok('a@breadfast.com', { firebase: { sign_in_provider: 'password' } }))).status, 403);
   assert.equal((await call('GET', '/api/auth/me', tok('a@breadfast.com', { email_verified: false }))).status, 403);
-  assert.equal((await call('GET', '/api/auth/me', tok('a@breadfast.com', { exp: 1 }))).status, 401);
+  assert.equal((await call('GET', '/api/auth/me', tok('a@breadfast.com', { exp: 1 }))).status, 200); // expiry is managed by Firebase; the browser never judges it
   assert.equal(decodeJwtPayload(tok('é@breadfast.com', { name: 'محمد' }).slice(7)).name, 'محمد');
-  ok('missing/malformed/expired tokens, non-Google provider and unverified email are refused; UTF-8 names decode');
+  ok('missing/malformed tokens, non-Google provider and unverified email are refused; UTF-8 names decode');
 }
 // 2. /api/auth/me
 {
@@ -194,5 +194,74 @@ let n = 0; const ok = (m: string) => { n++; console.log('  ✓', m); };
   await target.fetch('https://firestore.googleapis.com/v1/x'); await target.fetch('/assets/app.js');
   assert.deepEqual(seen, ['https://firestore.googleapis.com/v1/x', '/assets/app.js']);
   ok('fetch interceptor answers /api/* locally (header styles, query strings, POST bodies) and passes everything else through');
+}
+
+// 12. a single transient 403 must NOT lock a valid user out; a persistent one is "blocked"
+{
+  let calls = 0;
+  const { call } = setup((m, p) => { if (m === 'GET' && p === 'meta/kb') { calls++; return calls === 1; } return false; });
+  const r = await call('GET', '/api/auth/me', tok('emp@breadfast.com'));
+  assert.equal(r.json.authorized, true); assert.equal(calls, 2);
+  ok('one transient 403 on the access probe is re-checked and the user is NOT reported as blocked');
+}
+// 13. Firestore errors are retryable errors, never verdicts
+{
+  const a = setup((m, p) => m === 'GET' && p === 'meta/kb');
+  assert.equal((await a.call('GET', '/api/auth/me', tok('emp@breadfast.com'))).json.reason, 'blocked');
+  const rate = (code: number) => async () => ({ ok: false, status: code, json: async () => ({}), text: async () => '{}' }) as any;
+  const mk = (code: number) => createLocalApi({ projectId: 'p', databaseId: 'd', fetchImpl: rate(code) as any, sample: () => SAMPLE_KB, now: () => NOW, sleep: async () => {} });
+  const r429 = await mk(429).handle({ method: 'GET', path: '/api/auth/me', authorization: tok('emp@breadfast.com') });
+  assert.equal(r429.status, 503); assert.equal(r429.json.authorized, false); assert.ok(r429.json.error);
+  const r401 = await mk(401).handle({ method: 'GET', path: '/api/auth/me', authorization: tok('emp@breadfast.com') });
+  assert.equal(r401.status, 401);
+  const up = await mk(429).handle({ method: 'POST', path: '/api/kb/upload', authorization: tok('emp@breadfast.com'), body: { parsedWorkbook: wbOf(['A']) } });
+  assert.equal(up.status, 503); // an admin is never mistaken for a plain user because of a rate limit
+  const main = await mk(429).handle({ method: 'GET', path: '/api/auth/me', authorization: tok(MAIN) });
+  assert.equal(main.json.authorized, true); // the Main Admin never depends on Firestore to sign in
+  ok('rate limits (429), failures and rejected tokens (401) are retryable errors; the Main Admin always signs in');
+}
+// 14. who changed the KB, and when, is stored on each version and survives the admin losing admin rights
+{
+  const { fk, call } = setup();
+  fk.docs.set('admins/lead@breadfast.com', { email: 'lead@breadfast.com', grantedBy: MAIN, grantedAt: 'x' });
+  const up = await call('POST', '/api/kb/upload', tok('lead@breadfast.com', { name: 'Lead Person' }), { fileName: 'a.xlsx', parsedWorkbook: wbOf(['T'], 4) });
+  assert.equal(up.status, 200, JSON.stringify(up.json));
+  fk.docs.delete('admins/lead@breadfast.com'); // the admin is removed afterwards
+  const v = await call('GET', '/api/kb/versions', tok(MAIN));
+  const row = v.json.versions.find((x: any) => x.fileName === 'a.xlsx');
+  assert.equal(row.publishedByName, 'Lead Person'); assert.equal(row.publishedBy, 'lead@breadfast.com'); assert.equal(row.publishedAt, NOW.toISOString());
+  assert.equal(fk.docs.get('meta/kb')!.publishedByName, 'Lead Person');
+  const rb = await call('POST', '/api/kb/rollback', tok(MAIN, { name: 'Main Person' }), { targetVersionId: row.versionId });
+  assert.equal(rb.status, 200);
+  const v2 = await call('GET', '/api/kb/versions', tok(MAIN));
+  const row2 = v2.json.versions.find((x: any) => x.versionId === row.versionId);
+  assert.equal(row2.lastActivatedByName, 'Main Person'); assert.ok(row2.lastActivatedAt);
+  ok('each version keeps its publish time and the publisher name + email (even after the admin is removed); rollbacks are recorded too');
+}
+// 15. cheap pointer endpoint for fallback polling
+{
+  const { call } = setup();
+  assert.equal((await call('GET', '/api/kb/pointer', tok('emp@breadfast.com'))).json.activeVersionId, null);
+  await call('POST', '/api/kb/upload', tok(MAIN), { fileName: 'p.xlsx', parsedWorkbook: wbOf(['T'], 3) });
+  const r = await call('GET', '/api/kb/pointer', tok('emp@breadfast.com'));
+  assert.ok(r.json.activeVersionId && r.json.versionChecksum);
+  assert.equal((await call('GET', '/api/kb/pointer', tok('x@gmail.com'))).status, 403);
+  ok('pointer endpoint reports the active version cheaply and refuses outsiders');
+}
+
+// 16. the version marked "active" is the one the pointer really uses (also after rollbacks)
+{
+  const { call } = setup();
+  await call('POST', '/api/kb/upload', tok(MAIN), { fileName: 'one.xlsx', parsedWorkbook: wbOf(['T'], 3) });
+  await new Promise((r) => setTimeout(r, 5));
+  await call('POST', '/api/kb/upload', tok(MAIN), { fileName: 'two.xlsx', parsedWorkbook: wbOf(['T'], 4) });
+  const active = async () => (await call('GET', '/api/kb/versions', tok(MAIN))).json.versions.filter((x: any) => x.isActive).map((x: any) => x.fileName);
+  assert.deepEqual(await active(), ['two.xlsx']);
+  const one = (await call('GET', '/api/kb/versions', tok(MAIN))).json.versions.find((x: any) => x.fileName === 'one.xlsx');
+  await call('POST', '/api/kb/rollback', tok(MAIN), { targetVersionId: one.versionId });
+  assert.deepEqual(await active(), ['one.xlsx']);
+  await call('POST', '/api/kb/rollback', tok(MAIN), { targetVersionId: 'test-v1-initial' });
+  assert.deepEqual(await active(), ['Sample_KB.xlsx']);
+  ok('exactly one version is flagged active and it follows publishes and rollbacks');
 }
 console.log(`\nALL ${n} TESTS PASSED`);

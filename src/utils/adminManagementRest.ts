@@ -10,6 +10,7 @@ import {
   buildBlockedPayload,
   MAIN_ADMIN_EMAIL,
   isCompanyEmail,
+  isMainAdminAddress,
 } from './accessPayloads';
 
 export const fsClient = createFirestoreRest({
@@ -257,6 +258,9 @@ export async function revokeAdmin(token: string, targetEmail: string): Promise<{
  */
 export async function blockEmail(token: string, targetEmail: string, callerEmail: string): Promise<{ success: boolean; status: number; error?: string }> {
   const normTarget = targetEmail.trim().toLowerCase();
+  if (isMainAdminAddress(normTarget)) {
+    return { success: false, status: 403, error: 'The Main Admin cannot be blocked.' };
+  }
   const payload = buildBlockedPayload(normTarget, callerEmail);
   const fields: Record<string, any> = {};
   for (const [k, v] of Object.entries(payload)) {

@@ -69,3 +69,18 @@ export function isCompanyEmail(email: string): boolean {
 export function isMainAdmin(email: string): boolean {
   return email.trim().toLowerCase() === MAIN_ADMIN_EMAIL;
 }
+
+/**
+ * True for the Main Admin address AND its Gmail look-alikes (dots, +tags, googlemail.com), so nobody can even try to
+ * add the Main Admin (or a variant of it) to the blocked list. The security rules independently ignore the blocked list
+ * for the Main Admin, so this is an extra guard in the UI and in the REST helper.
+ */
+export function isMainAdminAddress(email: string): boolean {
+  const norm = (address: string): string => {
+    const [local = '', domainRaw = ''] = address.trim().toLowerCase().split('@');
+    const domain = domainRaw === 'googlemail.com' ? 'gmail.com' : domainRaw;
+    if (domain !== 'gmail.com') return `${local}@${domain}`;
+    return `${local.split('+')[0].replace(/\./g, '')}@gmail.com`;
+  };
+  return norm(email) === norm(MAIN_ADMIN_EMAIL);
+}

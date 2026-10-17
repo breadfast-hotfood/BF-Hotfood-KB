@@ -31,6 +31,11 @@ interface KBVersionItem {
   status: string;
   publishedAt: string | null;
   publishedBy: string;
+  publishedByName?: string;
+  lastActivatedAt?: string | null;
+  lastActivatedBy?: string;
+  lastActivatedByName?: string;
+  isActive?: boolean;
   totalTabs: number;
   totalRecords: number;
   totalChunks: number;
@@ -39,6 +44,17 @@ interface KBVersionItem {
   isDefault?: boolean;
   isSample?: boolean;
 }
+
+const formatWhen = (iso?: string | null): string => {
+  if (!iso) return 'unknown date';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+};
+const whoLabel = (name?: string, email?: string): string => {
+  if (name && email) return `${name} (${email})`;
+  return name || email || 'unknown';
+};
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   currentUser,
@@ -89,6 +105,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       setLoadingVersions(false);
     }
   };
+
+  // The KB pointer changed (someone published or rolled back): refresh the history without a manual reload
+  useEffect(() => {
+    const onPointerChanged = () => {
+      if (activeTab === 'kb-manage') fetchVersions();
+    };
+    window.addEventListener('kb-pointer-changed', onPointerChanged);
+    return () => window.removeEventListener('kb-pointer-changed', onPointerChanged);
+  }, [activeTab]);
 
   // Browser-side parsing: FileReader -> Uint8Array -> XLSX.read(data, { type: 'array' })
   // Zero Node Buffer in browser code.
@@ -627,6 +652,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                     Sample data - not a published version
                                   </span>
                                 )}
+                                {!(v.isDefault || v.isSample) && (
+                                  <div className="mt-1 font-sans font-normal text-[10px] leading-snug text-[var(--muted)]">
+                                    <div>Published {formatWhen(v.publishedAt)}</div>
+                                    <div>by {whoLabel(v.publishedByName, v.publishedBy)}</div>
+                                    {v.lastActivatedAt && (
+                                      <div>
+                                        Rolled back to on {formatWhen(v.lastActivatedAt)} by {whoLabel(v.lastActivatedByName, v.lastActivatedBy)}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </td>
                               <td className="p-2.5 font-medium truncate max-w-[160px]" title={v.fileName}>
                                 {v.fileName}
@@ -636,13 +672,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               </td>
                               <td className="p-2.5">
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                                  v.status === 'active'
+                                  v.isActive
                                     ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'
                                     : v.status === 'failed'
                                     ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
                                     : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300'
                                 }`}>
-                                  {v.status || 'published'}
+                                  {v.isActive ? 'active' : (v.status === 'active' ? 'published' : (v.status || 'published'))}
                                 </span>
                               </td>
                               <td className="p-2.5 text-right">

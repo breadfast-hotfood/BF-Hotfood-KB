@@ -40,8 +40,9 @@ export const AdminsTab: React.FC<AdminsTabProps> = ({ currentUser, onShowToast }
   } | null>(null);
   const [actionInProgress, setActionInProgress] = useState<boolean>(false);
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (silent: boolean | React.MouseEvent = false) => {
+    const quiet = silent === true;
+    if (!quiet) setLoading(true);
     setErrorMsg(null);
     try {
       const token = await (window as any).__getAuthToken?.();
@@ -88,6 +89,10 @@ export const AdminsTab: React.FC<AdminsTabProps> = ({ currentUser, onShowToast }
 
   useEffect(() => {
     loadData();
+    // Keep the lists fresh when the user comes back to this window (no manual refresh needed)
+    const onVisible = () => { if (document.visibilityState === 'visible') void loadData(true); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
   const handleGrant = async (targetEmail: string) => {
