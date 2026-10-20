@@ -1,20 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AuthUser, Workbook } from '../types';
-import {
-  ShieldCheck,
-  Upload,
-  AlertCircle,
-  FileSpreadsheet,
-  CheckCircle2,
-  Users,
-  Ban,
-  ShieldAlert,
-  Clock,
-  AlertTriangle,
-} from 'lucide-react';
+import { ShieldCheck, Upload, AlertCircle, FileSpreadsheet, CheckCircle2, Users, Ban, ShieldAlert, Clock, AlertTriangle, Trash2 } from 'lucide-react';
 import { DryRunReport, computeKBDryRun } from '../utils/kbDiffEngine';
 import { parseWorkbookBytes } from '../utils/workbookParser';
 import { AdminsTab } from './AdminsTab';
+import { useBackdropClose } from '../utils/backdropClose';
+import { orderVersions, visibleVersions, deletableVersions, isDeletable, canRollback } from '../utils/versionList';
 import { BlockedEmailsTab } from './BlockedEmailsTab';
 import { RulesSelfTestPanel } from './RulesSelfTestPanel';
 
@@ -63,6 +54,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onWorkbookUpdated,
 }) => {
   const isMainAdmin = currentUser.role === 'Main Admin';
+  const backdrop = useBackdropClose(onClose);
   const [activeTab, setActiveTab] = useState<'kb-manage' | 'admins' | 'blocked' | 'rules-selftest' | 'overview'>('kb-manage');
 
   // KB Ingestion State
@@ -77,6 +69,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [versions, setVersions] = useState<KBVersionItem[]>([]);
   const [loadingVersions, setLoadingVersions] = useState<boolean>(false);
   const [rollingBackId, setRollingBackId] = useState<string | null>(null);
+  const [showAllVersions, setShowAllVersions] = useState<boolean>(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingAll, setDeletingAll] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch version history when tab is opened
@@ -240,6 +235,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   };
 
   const handleRollback = async (targetVersionId: string) => {
+    if (versions.find(x => x.versionId === targetVersionId)?.isActive) {
+      alert('That version is already the active version.');
+      return;
+    }
     if (!confirm(`Are you sure you want to rollback to version ${targetVersionId}?`)) return;
 
     setRollingBackId(targetVersionId);
@@ -282,10 +281,79 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
+  // Delete ONE historical version. The active version can never be deleted (checked here and again on the server).
+  const handleDeleteVersion = async (v: KBVersionItem) => {
+    if (!isDeletable(v)) {
+      alert('The active version (and the built-in sample) cannot be deleted.');
+      return;
+    }
+    if (!confirm(`Delete version ${v.versionId} (${v.fileName})?\n\nThis permanently removes its stored data and cannot be undone. The active version is not affected.`)) return;
+
+    setDeletingId(v.versionId);
+    try {
+      const token = await (window as any).__getAuthToken?.();
+      if (!token) return;
+      const res = await fetch('/api/kb/delete-version', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ versionId: v.versionId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onShowToast(`Deleted version ${v.versionId}`);
+      } else {
+        alert(data.error || 'Could not delete this version.');
+      }
+    } catch (e: any) {
+      alert(`Error while deleting the version: ${e.message}`);
+    } finally {
+      setDeletingId(null);
+      fetchVersions();
+    }
+  };
+
+  // Delete ALL historical versions at once. The active version is always kept.
+  const handleDeleteAll = async () => {
+    const count = deletableVersions(versions).length;
+    if (count === 0) return;
+    if (!confirm(`Delete ALL ${count} historical version${count === 1 ? '' : 's'}?\n\nThe currently active version is kept. This permanently removes their stored data and cannot be undone.`)) return;
+
+    setDeletingAll(true);
+    try {
+      const token = await (window as any).__getAuthToken?.();
+      if (!token) return;
+      const res = await fetch('/api/kb/delete-historical', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        onShowToast(`Deleted ${data.deleted} historical version${data.deleted === 1 ? '' : 's'}`);
+        if (data.failed && data.failed.length > 0) {
+          alert(`${data.failed.length} version(s) could not be deleted and were left hidden. Try "Delete all" again.\n\n${data.failed[0].error}`);
+        }
+      } else {
+        alert(data.error || 'Could not delete the historical versions.');
+      }
+    } catch (e: any) {
+      alert(`Error while deleting versions: ${e.message}`);
+    } finally {
+      setDeletingAll(false);
+      setShowAllVersions(false);
+      fetchVersions();
+    }
+  };
+
+  const orderedVersions = orderVersions(versions);
+  const shownVersions = visibleVersions(orderedVersions, showAllVersions);
+  const hiddenVersionCount = orderedVersions.length - shownVersions.length;
+  const deletableCount = deletableVersions(orderedVersions).length;
+
   return (
     <>
       <div className="scrim show" onClick={onClose} />
-      <div className="modal show" role="dialog" aria-modal="true">
+      <div className="modal show" role="dialog" aria-modal="true" {...backdrop}>
         <div className="modal-card !w-[min(920px,96vw)] max-h-[92vh] flex flex-col">
           {/* Header */}
           <div className="modal-head !py-3.5 !px-5 bg-[var(--panel)] border-b border-[var(--line)] shrink-0">
@@ -603,25 +671,37 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   </div>
                 )}
 
-                {/* Step 3: Version History Table (Retains Last 3 Published Versions) */}
+                {/* Step 3: Version History Table */}
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div>
                       <h4 className="text-xs font-bold text-[var(--text)] flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-[var(--muted-2)]" />
-                        <span>Version History & Rollback (Retaining Last 3 Published Versions)</span>
+                        <span>Version History & Rollback</span>
                       </h4>
                       <span className="text-[10px] text-[var(--muted-2)]">
                         Each version verified with SHA-256 chunk checksums and safe UTF-8 limits (≤ 750 KiB/chunk).
                       </span>
                     </div>
-                    <button
-                      onClick={fetchVersions}
-                      disabled={loadingVersions}
-                      className="btn ghost text-[11px] !p-1 text-[var(--muted)]"
-                    >
-                      {loadingVersions ? 'Refreshing...' : 'Refresh'}
-                    </button>
+                    <div className="flex items-center gap-1">
+                      {deletableCount > 0 && (
+                        <button
+                          onClick={handleDeleteAll}
+                          disabled={deletingAll || deletingId !== null}
+                          className="btn ghost text-[11px] !p-1 text-red-600 font-semibold disabled:opacity-40"
+                          title="Delete every historical version. The active version is kept."
+                        >
+                          {deletingAll ? 'Deleting...' : `Delete all historical (${deletableCount})`}
+                        </button>
+                      )}
+                      <button
+                        onClick={fetchVersions}
+                        disabled={loadingVersions}
+                        className="btn ghost text-[11px] !p-1 text-[var(--muted)]"
+                      >
+                        {loadingVersions ? 'Refreshing...' : 'Refresh'}
+                      </button>
+                    </div>
                   </div>
 
                   <div className="border border-[var(--line)] rounded-xl overflow-hidden text-xs">
@@ -632,7 +712,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           <th className="p-2.5">File Name</th>
                           <th className="p-2.5">Records / Sheets / Chunks</th>
                           <th className="p-2.5">Status</th>
-                          <th className="p-2.5 text-right">Rollback Action</th>
+                          <th className="p-2.5 text-right">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[var(--line)]">
@@ -643,7 +723,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             </td>
                           </tr>
                         ) : (
-                          versions.map((v) => (
+                          shownVersions.map((v) => (
                             <tr key={v.versionId} className="hover:bg-[var(--panel-2)]/50">
                               <td className="p-2.5 font-mono text-[11px] font-bold">
                                 {v.versionId}
@@ -681,15 +761,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                   {v.isActive ? 'active' : (v.status === 'active' ? 'published' : (v.status || 'published'))}
                                 </span>
                               </td>
-                              <td className="p-2.5 text-right">
-                                <button
-                                  onClick={() => handleRollback(v.versionId)}
-                                  disabled={rollingBackId === v.versionId || v.status === 'failed'}
-                                  className="btn ghost text-[11px] !py-1 !px-2 text-[var(--accent-contrast)] font-semibold disabled:opacity-30"
-                                  title="Rollback active KB to this version"
-                                >
-                                  {rollingBackId === v.versionId ? 'Rolling back...' : 'Rollback'}
-                                </button>
+                              <td className="p-2.5 text-right whitespace-nowrap">
+                                {v.isActive ? (
+                                  <span className="text-[10px] font-semibold text-[var(--muted)]" title="This is the version users are seeing now">
+                                    Current version
+                                  </span>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => handleRollback(v.versionId)}
+                                      disabled={rollingBackId === v.versionId || deletingAll || deletingId !== null || !canRollback(v)}
+                                      className="btn ghost text-[11px] !py-1 !px-2 text-[var(--accent-contrast)] font-semibold disabled:opacity-30"
+                                      title="Rollback active KB to this version"
+                                    >
+                                      {rollingBackId === v.versionId ? 'Rolling back...' : 'Rollback'}
+                                    </button>
+                                    {isDeletable(v) && (
+                                      <button
+                                        onClick={() => handleDeleteVersion(v)}
+                                        disabled={deletingId === v.versionId || deletingAll || rollingBackId !== null}
+                                        className="btn ghost text-[11px] !py-1 !px-2 text-red-600 font-semibold disabled:opacity-30 inline-flex items-center gap-1"
+                                        title="Delete this historical version"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                        {deletingId === v.versionId ? 'Deleting...' : 'Delete'}
+                                      </button>
+                                    )}
+                                  </>
+                                )}
                               </td>
                             </tr>
                           ))
@@ -697,6 +796,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </tbody>
                     </table>
                   </div>
+                  {orderedVersions.length > 3 && (
+                    <div className="flex justify-center pt-1">
+                      <button
+                        onClick={() => setShowAllVersions(v => !v)}
+                        className="btn ghost text-[11px] !py-1 !px-3 text-[var(--accent-contrast)] font-semibold"
+                      >
+                        {showAllVersions ? 'Show less' : `Show more (${hiddenVersionCount} more)`}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

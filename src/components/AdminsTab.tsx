@@ -8,6 +8,7 @@ import {
   revokeAdmin,
 } from '../utils/adminManagementRest';
 import { MAIN_ADMIN_EMAIL } from '../utils/accessPayloads';
+import { useBackdropClose } from '../utils/backdropClose';
 import {
   ShieldCheck,
   UserCheck,
@@ -39,6 +40,8 @@ export const AdminsTab: React.FC<AdminsTabProps> = ({ currentUser, onShowToast }
     targetName?: string;
   } | null>(null);
   const [actionInProgress, setActionInProgress] = useState<boolean>(false);
+
+  const confirmBackdrop = useBackdropClose(() => setConfirmModal(null));
 
   const loadData = async (silent: boolean | React.MouseEvent = false) => {
     const quiet = silent === true;
@@ -356,7 +359,7 @@ export const AdminsTab: React.FC<AdminsTabProps> = ({ currentUser, onShowToast }
 
       {/* Confirmation Dialog Modal */}
       {confirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" {...confirmBackdrop}>
           <div className="bg-[var(--panel)] border border-[var(--line)] rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4">
             <h4 className="text-sm font-bold text-[var(--text)] flex items-center gap-2">
               {confirmModal.type === 'grant' ? (

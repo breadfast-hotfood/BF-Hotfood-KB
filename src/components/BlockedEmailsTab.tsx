@@ -8,6 +8,7 @@ import {
   unblockEmail,
 } from '../utils/adminManagementRest';
 import { isMainAdminAddress } from '../utils/accessPayloads';
+import { useBackdropClose } from '../utils/backdropClose';
 import {
   Ban,
   UserX,
@@ -34,6 +35,8 @@ export const BlockedEmailsTab: React.FC<BlockedEmailsTabProps> = ({ currentUser,
 
   // Unblock confirmation
   const [unblockTarget, setUnblockTarget] = useState<string | null>(null);
+
+  const unblockBackdrop = useBackdropClose(() => setUnblockTarget(null));
 
   const loadData = async () => {
     setLoading(true);
@@ -238,7 +241,7 @@ export const BlockedEmailsTab: React.FC<BlockedEmailsTabProps> = ({ currentUser,
 
       {/* Unblock Confirmation Modal */}
       {unblockTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs" {...unblockBackdrop}>
           <div className="bg-[var(--panel)] border border-[var(--line)] rounded-2xl max-w-sm w-full p-5 shadow-2xl space-y-4">
             <h4 className="text-sm font-bold text-[var(--text)] flex items-center gap-2">
               <RefreshCw className="w-4 h-4 text-[var(--green)]" />

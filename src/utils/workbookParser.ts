@@ -260,15 +260,10 @@ export function parseWorkbookRows(rawRows: any[][]): KBData {
     if (row.every(x => cellStr(x) === '')) continue;
     const di = divInfo(row);
     if (di) {
+      // Category divider row. Any stray text sitting in one of its other columns is an annotation of the
+      // spreadsheet layout, NOT an "Important Note": it must not be added to the notes list. The text is not lost:
+      // it stays in the sheet grid and is visible in the Table view.
       currentSection = cellStr(row[0]);
-      di.strays.forEach(k => {
-        const t = cellFull(row[k]);
-        if (t) {
-          importantNotes.push(
-            currentSection + ' › ' + (cellStr(fieldForCol[k] || '').split('\n')[0]) + ': ' + t
-          );
-        }
-      });
       continue;
     }
 

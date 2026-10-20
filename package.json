@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "test": "tsx tests/kbPublish.test.ts && tsx tests/firestoreList.test.ts && tsx tests/access_model_phase5.test.ts && tsx tests/localApi.test.ts && tsx tests/session.test.ts && tsx tests/pointerWatcher.test.ts && tsx tests/mainAdminGuard.test.ts"
+    "test": "tsx tests/kbPublish.test.ts && tsx tests/firestoreList.test.ts && tsx tests/access_model_phase5.test.ts && tsx tests/localApi.test.ts && tsx tests/session.test.ts && tsx tests/pointerWatcher.test.ts && tsx tests/mainAdminGuard.test.ts && tsx tests/workbookParser.test.ts && tsx tests/uiHelpers.test.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",

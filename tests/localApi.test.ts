@@ -227,10 +227,12 @@ let n = 0; const ok = (m: string) => { n++; console.log('  ✓', m); };
   const up = await call('POST', '/api/kb/upload', tok('lead@breadfast.com', { name: 'Lead Person' }), { fileName: 'a.xlsx', parsedWorkbook: wbOf(['T'], 4) });
   assert.equal(up.status, 200, JSON.stringify(up.json));
   fk.docs.delete('admins/lead@breadfast.com'); // the admin is removed afterwards
+  await new Promise((r) => setTimeout(r, 3));
+  await call('POST', '/api/kb/upload', tok(MAIN), { fileName: 'b.xlsx', parsedWorkbook: wbOf(['T'], 5) }); // a.xlsx becomes a historical version
   const v = await call('GET', '/api/kb/versions', tok(MAIN));
   const row = v.json.versions.find((x: any) => x.fileName === 'a.xlsx');
   assert.equal(row.publishedByName, 'Lead Person'); assert.equal(row.publishedBy, 'lead@breadfast.com'); assert.equal(row.publishedAt, NOW.toISOString());
-  assert.equal(fk.docs.get('meta/kb')!.publishedByName, 'Lead Person');
+  assert.equal(fk.docs.get(`kbVersions/${row.versionId}`)!.publishedByName, 'Lead Person');
   const rb = await call('POST', '/api/kb/rollback', tok(MAIN, { name: 'Main Person' }), { targetVersionId: row.versionId });
   assert.equal(rb.status, 200);
   const v2 = await call('GET', '/api/kb/versions', tok(MAIN));
@@ -263,5 +265,121 @@ let n = 0; const ok = (m: string) => { n++; console.log('  ✓', m); };
   await call('POST', '/api/kb/rollback', tok(MAIN), { targetVersionId: 'test-v1-initial' });
   assert.deepEqual(await active(), ['Sample_KB.xlsx']);
   ok('exactly one version is flagged active and it follows publishes and rollbacks');
+}
+
+// ---------- version management: delete, delete all, safeguards ----------
+const keysOf = (fk: any, id: string) => [...fk.docs.keys()].filter((k: string) => k === `kbVersions/${id}` || k.startsWith(`kbVersions/${id}/`));
+async function publishN(call: any, names: string[]) {
+  for (const [i, name] of names.entries()) {
+    const r = await call('POST', '/api/kb/upload', tok(MAIN), { fileName: name, parsedWorkbook: wbOf(['T'], 3 + i) });
+    assert.equal(r.status, 200, JSON.stringify(r.json));
+    await new Promise((res) => setTimeout(res, 3));
+  }
+}
+const versionsOf = async (call: any) => (await call('GET', '/api/kb/versions', tok(MAIN))).json.versions as any[];
+
+// 17. delete one historical version: permissions, safeguards, data really removed
+{
+  const { fk, call } = setup();
+  await publishN(call, ['v1.xlsx', 'v2.xlsx', 'v3.xlsx']);
+  const vs = await versionsOf(call);
+  const v1 = vs.find((x) => x.fileName === 'v1.xlsx'), v3 = vs.find((x) => x.fileName === 'v3.xlsx');
+  assert.equal(v3.isActive, true);
+  const del = (id: any, who = tok(MAIN)) => call('POST', '/api/kb/delete-version', who, { versionId: id });
+  assert.equal((await del(v1.versionId, tok('user@breadfast.com'))).status, 403);
+  assert.equal((await call('POST', '/api/kb/delete-version', tok(MAIN), {})).status, 400);
+  assert.equal((await del('test-v1-initial')).status, 400);
+  assert.equal((await del('nope')).status, 404);
+  const activeBefore = keysOf(fk, v3.versionId).length;
+  const refused = await del(v3.versionId);
+  assert.equal(refused.status, 409); assert.match(refused.json.error, /active version cannot be deleted/);
+  assert.equal(keysOf(fk, v3.versionId).length, activeBefore); assert.equal(fk.docs.get('meta/kb')!.activeVersionId, v3.versionId);
+  assert.ok(keysOf(fk, v1.versionId).length > 1);
+  const ok1 = await del(v1.versionId);
+  assert.equal(ok1.status, 200, JSON.stringify(ok1.json));
+  assert.equal(keysOf(fk, v1.versionId).length, 0);
+  assert.ok(!(await versionsOf(call)).some((x) => x.versionId === v1.versionId));
+  assert.equal(fk.docs.get('meta/kb')!.activeVersionId, v3.versionId);
+  const act = await call('GET', '/api/kb/active', tok('user@breadfast.com'));
+  assert.equal(act.json.isSample, false); assert.equal(act.json.tabs[0].kb.records.length, 5);
+  assert.ok([...fk.docs.keys()].some((k) => k.startsWith('auditLogs/')));
+  ok('delete one version: only admins; the active version and the built-in sample are refused; chunks + record are removed; the site keeps working');
+}
+// 18. a concurrent rollback to the version being deleted is caught (409) and the version is restored untouched
+{
+  const fk = fakeFirestore(); let armed = false, metaGets = 0, target = '';
+  const wrapped: any = async (url: any, init: any) => {
+    if (armed && (init?.method || 'GET') === 'GET' && String(url).endsWith('/documents/meta/kb') && ++metaGets === 2) {
+      fk.docs.set('meta/kb', { ...fk.docs.get('meta/kb'), activeVersionId: target });
+    }
+    return fk.fetch(url, init);
+  };
+  const api = createLocalApi({ projectId: 'p', databaseId: 'd', fetchImpl: wrapped, sample: () => SAMPLE_KB, now: () => NOW, sleep: async () => {} });
+  const call = (m: string, p: string, a?: string, b?: any) => api.handle({ method: m, path: p, authorization: a, body: b });
+  await publishN(call, ['v1.xlsx', 'v2.xlsx']);
+  const v1 = (await versionsOf(call)).find((x) => x.fileName === 'v1.xlsx');
+  target = v1.versionId; armed = true;
+  const r = await call('POST', '/api/kb/delete-version', tok(MAIN), { versionId: v1.versionId });
+  assert.equal(r.status, 409);
+  assert.ok(keysOf(fk, v1.versionId).length > 1, 'chunks untouched');
+  assert.notEqual(fk.docs.get(`kbVersions/${v1.versionId}`)!.status, 'deleting');
+  ok('if the version becomes active while it is being deleted, deletion stops (409) and the version is restored');
+}
+// 19. delete ALL historical versions: everything except the active one (also failed / half-deleted leftovers)
+{
+  const { fk, call } = setup();
+  await publishN(call, ['v1.xlsx', 'v2.xlsx', 'v3.xlsx', 'v4.xlsx']);
+  fk.docs.set('kbVersions/v-junk', { versionId: 'v-junk', status: 'failed', fileName: 'x' });
+  fk.docs.set('kbVersions/v-stuck', { versionId: 'v-stuck', status: 'deleting', fileName: 'y', totalChunks: 1 });
+  fk.docs.set('kbVersions/v-stuck/chunks/chunk_0', { chunkId: 'chunk_0', payloadJson: '[]' });
+  const before = await versionsOf(call);
+  const active = before.find((x) => x.isActive);
+  assert.equal(active.fileName, 'v4.xlsx'); assert.ok(before.length >= 4);
+  assert.equal((await call('POST', '/api/kb/delete-historical', tok('user@breadfast.com'), {})).status, 403);
+  const r = await call('POST', '/api/kb/delete-historical', tok(MAIN), {});
+  assert.equal(r.status, 200, JSON.stringify(r.json)); assert.equal(r.json.success, true); assert.equal(r.json.deleted, 5);
+  assert.equal(r.json.activeVersionId, active.versionId);
+  const remaining = [...fk.docs.keys()].filter((k) => k.startsWith('kbVersions/'));
+  assert.ok(remaining.length > 0 && remaining.every((k) => k.startsWith(`kbVersions/${active.versionId}`)), remaining.join(','));
+  assert.equal(fk.docs.get('meta/kb')!.activeVersionId, active.versionId);
+  assert.equal((await call('GET', '/api/kb/active', tok('user@breadfast.com'))).json.tabs[0].kb.records.length, 6);
+  const again = await call('POST', '/api/kb/delete-historical', tok(MAIN), {});
+  assert.equal(again.json.deleted, 0);
+  const after = await versionsOf(call);
+  assert.deepEqual(after.filter((x) => !x.isSample).map((x) => x.versionId), [active.versionId]);
+  ok('delete all: every historical record (incl. failed / half-deleted leftovers) is removed; the active version and the working site are untouched; repeatable');
+}
+// 20. if the active version cannot be verified, NOTHING is deleted
+{
+  let blockMeta = false;
+  const { fk, call } = setup((m, p) => blockMeta && m === 'GET' && p === 'meta/kb');
+  await publishN(call, ['v1.xlsx', 'v2.xlsx']);
+  const v1 = (await versionsOf(call)).find((x) => x.fileName === 'v1.xlsx');
+  const notAudit = (k: string) => !k.startsWith('auditLogs/');
+  const snapshot = [...fk.docs.keys()].filter(notAudit).sort();
+  blockMeta = true;
+  assert.equal((await call('POST', '/api/kb/delete-version', tok(MAIN), { versionId: v1.versionId })).status, 503);
+  assert.equal((await call('POST', '/api/kb/delete-historical', tok(MAIN), {})).status, 503);
+  assert.deepEqual([...fk.docs.keys()].filter(notAudit).sort(), snapshot); // not a single document was touched
+  assert.ok(keysOf(fk, v1.versionId).length > 1);
+  ok('when the active version cannot be verified, nothing is deleted (503)');
+}
+// 21. rollback safeguards + the list shows every stored version
+{
+  const { fk, call } = setup();
+  await publishN(call, ['a.xlsx', 'b.xlsx', 'c.xlsx', 'd.xlsx', 'e.xlsx']);
+  const vs = await versionsOf(call);
+  assert.equal(vs.filter((x) => !x.isSample).length, 5);           // not capped at 3 or 10: the UI decides what to show
+  assert.equal(vs.filter((x) => x.isActive).length, 1);
+  const active = vs.find((x) => x.isActive);
+  const same = await call('POST', '/api/kb/rollback', tok(MAIN), { targetVersionId: active.versionId });
+  assert.equal(same.status, 409); assert.match(same.json.error, /already the active version/);
+  const old = vs.find((x) => x.fileName === 'a.xlsx');
+  fk.docs.set(`kbVersions/${old.versionId}`, { ...fk.docs.get(`kbVersions/${old.versionId}`)!, status: 'deleting' });
+  assert.equal((await call('POST', '/api/kb/rollback', tok(MAIN), { targetVersionId: old.versionId })).status, 400);
+  fk.docs.set('kbVersions/v-failed', { versionId: 'v-failed', status: 'failed', fileName: 'f', publishedAt: NOW.toISOString() });
+  const shown = await versionsOf(call);
+  assert.ok(!shown.some((x) => x.versionId === 'v-failed' || x.versionId === old.versionId), 'failed and half-deleted versions are hidden');
+  ok('rollback to the active or a half-deleted version is refused; the list returns every usable version with exactly one active');
 }
 console.log(`\nALL ${n} TESTS PASSED`);

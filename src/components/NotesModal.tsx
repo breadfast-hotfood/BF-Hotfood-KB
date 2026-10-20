@@ -1,5 +1,6 @@
 import React from 'react';
 import { isRTLText, linkify, esc } from '../utils/kbUtils';
+import { useBackdropClose } from '../utils/backdropClose';
 
 interface NotesModalProps {
   isOpen: boolean;
@@ -8,12 +9,13 @@ interface NotesModalProps {
 }
 
 export const NotesModal: React.FC<NotesModalProps> = ({ isOpen, notes, onClose }) => {
+  const backdrop = useBackdropClose(onClose);
   if (!isOpen) return null;
 
   return (
     <>
       <div className="scrim show" onClick={onClose} />
-      <div className="modal show" role="dialog" aria-modal="true">
+      <div className="modal show" role="dialog" aria-modal="true" {...backdrop}>
         <div className="modal-card">
           <div className="modal-head">
             <h3 className="font-bold text-base text-[var(--text)]">💡 Important Notes</h3>

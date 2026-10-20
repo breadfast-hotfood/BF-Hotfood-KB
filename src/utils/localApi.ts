@@ -13,6 +13,7 @@ import { createFirestoreRest } from './firestoreRest';
 import { listCollectionDocs } from './firestoreList';
 import { publishWorkbook, loadActiveWorkbook as loadFromStore } from './kbPublish';
 import { computeKBDryRun } from './kbDiffEngine';
+import { withoutDividerAnnotationNotes } from './notesCleanup';
 import type { Workbook } from '../types';
 
 export const MAIN_ADMIN_EMAIL = 'breadfast.hotfood@gmail.com';
@@ -78,9 +79,9 @@ export function createLocalApi(opts: LocalApiOptions) {
     try { await fs.write(`auditLogs/${id}`, { actorUid: uid, actorEmail: email, action, details, timestamp: now().toISOString() }, token); } catch { /* non-blocking */ }
   }
 
-  async function listVersions(token: string): Promise<any[]> {
+  async function listVersions(token: string, limit = 200): Promise<any[]> {
     try {
-      const docs = await listCollectionDocs({ projectId: opts.projectId, databaseId: opts.databaseId, collection: 'kbVersions', token, limit: 50, fetchImpl: opts.fetchImpl });
+      const docs = await listCollectionDocs({ projectId: opts.projectId, databaseId: opts.databaseId, collection: 'kbVersions', token, limit, fetchImpl: opts.fetchImpl });
       return docs.map((d: any) => ({ ...d, versionId: d.versionId || d.__id }));
     } catch { return []; }
   }
@@ -128,7 +129,7 @@ export function createLocalApi(opts: LocalApiOptions) {
       const { token, email } = verify(req.authorization);
       if (email !== MAIN_ADMIN_EMAIL && !COMPANY_RE.test(email)) return { status: 403, json: { error: 'Access denied: account not authorized to view KB data.' } };
       const wb: any = await loadActive(token);
-      return { status: 200, json: { fileName: wb.fileName, tabs: wb.tabs, versionId: wb.versionId, isSample: !!wb.isSample } };
+      return { status: 200, json: { fileName: wb.fileName, tabs: wb.tabs.map((t: any) => withoutDividerAnnotationNotes(t)), versionId: wb.versionId, isSample: !!wb.isSample } };
     } catch (e: any) {
       return { status: e.status || 503, json: { error: e.message || 'Could not load the Knowledge Base' } };
     }
@@ -167,6 +168,7 @@ export function createLocalApi(opts: LocalApiOptions) {
 
       let tabs: any = workbook.tabs;
       try { tabs = ((await loadActive(token)) as any).tabs; } catch { /* fall back to the parsed tabs */ }
+      tabs = (tabs as any[]).map((t: any) => withoutDividerAnnotationNotes(t));
       return { status: 200, json: { success: true, versionId: pub.versionId, fileName: fileName || workbook.fileName, totalTabs: workbook.tabs.length, totalRecords: pub.totalRecords, totalChunks: pub.totalChunks, versionChecksum: pub.versionChecksum, tabs } };
     } catch (e: any) {
       return { status: e.status || 500, json: { error: e.message || 'KB upload and ingestion failed' } };
@@ -183,9 +185,8 @@ export function createLocalApi(opts: LocalApiOptions) {
       const ptr = await fs.get('meta/kb', token);
       const activeId: string | null = ptr.found ? (ptr.data?.activeVersionId || null) : null;
       (await listVersions(token))
-        .filter((d) => ['active', 'published', 'staging'].includes(d.status))
+        .filter((d) => ['active', 'published', 'staging', 'archived'].includes(d.status))
         .sort((a, b) => new Date(b.publishedAt || 0).getTime() - new Date(a.publishedAt || 0).getTime())
-        .slice(0, 10)
         .forEach((d) => versions.push({
           versionId: d.versionId, fileName: d.fileName, status: d.status, isActive: !!activeId && d.versionId === activeId, publishedAt: d.publishedAt || null, publishedBy: d.publishedBy || '', publishedByName: d.publishedByName || '', lastActivatedAt: d.lastActivatedAt || null, lastActivatedBy: d.lastActivatedBy || '', lastActivatedByName: d.lastActivatedByName || '',
           totalTabs: d.totalTabs || 0, totalRecords: d.totalRecords || 0, totalChunks: d.totalChunks || 1, versionChecksum: d.versionChecksum || '', tabNames: d.tabNames || [],
@@ -213,13 +214,17 @@ export function createLocalApi(opts: LocalApiOptions) {
       if (!targetVersionId) return { status: 400, json: { error: 'Missing targetVersionId.' } };
 
       const s = opts.sample();
+      const current = await readActive(token);
+      if (current.ok && (current.activeId ? current.activeId === targetVersionId : targetVersionId === s.versionId)) {
+        return { status: 409, json: { error: 'That version is already the active version.' } };
+      }
       let targetFileName = s.fileName;
       let vData: Record<string, any> | null = null;
       if (targetVersionId !== s.versionId) {
         const r = await fs.get(`kbVersions/${encodeURIComponent(targetVersionId)}`, token);
         if (!r.found || !r.data) return { status: 404, json: { error: 'Specified version does not exist in retained versions.' } };
         vData = r.data;
-        if (vData.status === 'failed') return { status: 400, json: { error: 'Cannot rollback to a failed or invalid version.' } };
+        if (vData.status === 'failed' || vData.status === 'deleting') return { status: 400, json: { error: 'Cannot rollback to a failed or invalid version.' } };
         targetFileName = vData.fileName || targetFileName;
         // Never switch the live pointer to a version whose chunks cannot be read.
         const total = Number(vData.totalChunks) || 0;
@@ -246,6 +251,113 @@ export function createLocalApi(opts: LocalApiOptions) {
     }
   }
 
+  // ---------------- version deletion (never the active version) ----------------
+
+  async function readActive(token: string): Promise<{ ok: true; activeId: string | null } | { ok: false }> {
+    const r = await fs.get('meta/kb', token);
+    if (r.status === 404) return { ok: true, activeId: null };
+    if (r.found) return { ok: true, activeId: r.data?.activeVersionId || null };
+    return { ok: false };
+  }
+
+  /**
+   * Deletes one stored version (its chunks first, then its record). The active version is checked three times:
+   * before starting, again right after the version is hidden (status "deleting"), and the pointer is never touched.
+   * If anything fails midway the version stays hidden ("deleting"), cannot be rolled back to, and a later delete retries.
+   */
+  async function purgeVersion(versionId: string, token: string): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+    const enc = encodeURIComponent(versionId);
+    const first = await readActive(token);
+    if (!first.ok) return { ok: false, status: 503, error: 'Could not verify which version is active, so nothing was deleted. Please retry.' };
+    if (first.activeId === versionId) return { ok: false, status: 409, error: 'The active version cannot be deleted.' };
+
+    const doc = await fs.get(`kbVersions/${enc}`, token);
+    if (doc.status === 404) return { ok: false, status: 404, error: 'That version no longer exists.' };
+    if (!doc.found || !doc.data) return { ok: false, status: doc.status === 401 ? 401 : 503, error: `Could not read the version (HTTP ${doc.status}). Nothing was deleted.` };
+    const previousStatus = doc.data.status || 'published';
+
+    // Hide it and make it impossible to roll back to while it is being removed.
+    await fs.write(`kbVersions/${enc}`, { status: 'deleting' }, token, { merge: true });
+
+    const second = await readActive(token);
+    if (!second.ok || second.activeId === versionId) {
+      try { await fs.write(`kbVersions/${enc}`, { status: previousStatus }, token, { merge: true }); } catch { /* best effort */ }
+      return second.ok
+        ? { ok: false, status: 409, error: 'The active version cannot be deleted.' }
+        : { ok: false, status: 503, error: 'Could not verify which version is active, so nothing was deleted. Please retry.' };
+    }
+
+    const total = Number(doc.data.totalChunks) || 0;
+    const ids: string[] = [];
+    if (total > 0) { for (let i = 0; i < total; i++) ids.push(`chunk_${i}`); }
+    else {
+      for (let i = 0; i < 500; i++) { // unknown count: walk chunk_0, chunk_1... until the first 404
+        const r = await fs.get(`kbVersions/${enc}/chunks/chunk_${i}`, token);
+        if (r.status === 404) break;
+        if (!r.found) return { ok: false, status: 503, error: `Could not read chunk_${i} (HTTP ${r.status}). The version stays hidden; try again.` };
+        ids.push(`chunk_${i}`);
+      }
+    }
+    for (const id of ids) {
+      if (!(await fs.del(`kbVersions/${enc}/chunks/${id}`, token))) {
+        return { ok: false, status: 500, error: `Could not delete ${id}. The version stays hidden; try again.` };
+      }
+    }
+    if (!(await fs.del(`kbVersions/${enc}`, token))) return { ok: false, status: 500, error: 'Could not delete the version record. It stays hidden; try again.' };
+    return { ok: true };
+  }
+
+  async function kbDeleteVersion(req: ApiRequest): Promise<ApiResponse> {
+    try {
+      const { token, email, uid } = verify(req.authorization);
+      const priv = await privilege(email, token);
+      if (!priv.isAdmin) return { status: 403, json: { error: 'Forbidden: only Admins can delete Knowledge Base versions.' } };
+      const versionId = req.body?.versionId;
+      if (typeof versionId !== 'string' || !versionId.trim()) return { status: 400, json: { error: 'Missing versionId.' } };
+      if (versionId === opts.sample().versionId) return { status: 400, json: { error: 'The built-in sample version is not stored and cannot be deleted.' } };
+      const r = await purgeVersion(versionId, token);
+      if (!r.ok) return { status: r.status, json: { error: r.error } };
+      await audit(uid, email, 'KB_VERSION_DELETED', { versionId }, token);
+      return { status: 200, json: { success: true, deletedVersionId: versionId } };
+    } catch (e: any) {
+      return { status: e.status || 500, json: { error: e.message || 'Delete failed' } };
+    }
+  }
+
+  async function kbDeleteHistorical(req: ApiRequest): Promise<ApiResponse> {
+    try {
+      const { token, email, uid } = verify(req.authorization);
+      const priv = await privilege(email, token);
+      if (!priv.isAdmin) return { status: 403, json: { error: 'Forbidden: only Admins can delete Knowledge Base versions.' } };
+
+      const active = await readActive(token);
+      if (!active.ok) return { status: 503, json: { error: 'Could not verify which version is active, so nothing was deleted. Please retry.' } };
+
+      let docs: Record<string, any>[];
+      try {
+        docs = await listCollectionDocs({ projectId: opts.projectId, databaseId: opts.databaseId, collection: 'kbVersions', token, limit: 500, fetchImpl: opts.fetchImpl });
+      } catch (e: any) {
+        return { status: 503, json: { error: `Could not list the versions, so nothing was deleted. ${e.message || ''}`.trim() } };
+      }
+      const sampleId = opts.sample().versionId;
+      const targets = docs.map((d) => String(d.versionId || d.__id || '')).filter((id) => id && id !== active.activeId && id !== sampleId);
+
+      const deleted: string[] = [];
+      const skipped: string[] = [];
+      const failed: { versionId: string; error: string }[] = [];
+      for (const id of targets) {
+        const r = await purgeVersion(id, token);
+        if (r.ok) deleted.push(id);
+        else if (r.status === 409 || r.status === 404) skipped.push(id);
+        else failed.push({ versionId: id, error: r.error });
+      }
+      await audit(uid, email, 'KB_VERSIONS_DELETED_ALL', { deleted: deleted.length, failed: failed.length, activeVersionId: active.activeId }, token);
+      return { status: 200, json: { success: failed.length === 0, deleted: deleted.length, deletedIds: deleted, skipped, failed, activeVersionId: active.activeId } };
+    } catch (e: any) {
+      return { status: e.status || 500, json: { error: e.message || 'Delete failed' } };
+    }
+  }
+
   async function kbPointer(req: ApiRequest): Promise<ApiResponse> {
     try {
       const { token, email } = verify(req.authorization);
@@ -261,6 +373,8 @@ export function createLocalApi(opts: LocalApiOptions) {
 
   const routes: Record<string, (r: ApiRequest) => Promise<ApiResponse>> = {
     'GET /api/kb/pointer': kbPointer,
+    'POST /api/kb/delete-version': kbDeleteVersion,
+    'POST /api/kb/delete-historical': kbDeleteHistorical,
     'GET /api/auth/me': authMe,
     'POST /api/auth/bootstrap': authBootstrap,
     'GET /api/kb/active': kbActive,
