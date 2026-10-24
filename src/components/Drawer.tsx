@@ -9,6 +9,7 @@ import {
   linkify,
   esc,
 } from '../utils/kbUtils';
+import { CollapsibleValue } from './CollapsibleValue';
 
 interface DrawerProps {
   record: RecordItem | null;
@@ -159,17 +160,19 @@ export const Drawer: React.FC<DrawerProps> = ({ record, kb, onClose, onShowToast
                         </svg>
                       )}
 
-                      {val.split(/\n\n+/).map((line, lIdx) => {
-                        const rtl = isRTLText(line);
-                        return (
-                          <p
-                            key={lIdx}
-                            className="fval-line"
-                            dir={rtl ? 'rtl' : 'auto'}
-                            dangerouslySetInnerHTML={{ __html: linkify(esc(line)) }}
-                          />
-                        );
-                      })}
+                      <CollapsibleValue key={`${record._section || ''}|${record._row}|${f.key}`} text={val}>
+                        {val.split(/\n\n+/).map((line, lIdx) => {
+                          const rtl = isRTLText(line);
+                          return (
+                            <p
+                              key={lIdx}
+                              className="fval-line"
+                              dir={rtl ? 'rtl' : 'auto'}
+                              dangerouslySetInnerHTML={{ __html: linkify(esc(line)) }}
+                            />
+                          );
+                        })}
+                      </CollapsibleValue>
                     </div>
                   </div>
                 );
