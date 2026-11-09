@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Tab, GridCell } from '../types';
-import { tableRowMatches, linkify, esc, normalize } from '../utils/kbUtils';
+import { tableRowMatches } from '../utils/kbUtils';
+import { richTextSegments, highlightTextSegments, safeCellHref, tabLinkTarget } from '../utils/richText';
 
 interface TableViewProps {
   tab: Tab;
@@ -36,23 +37,13 @@ export const TableView: React.FC<TableViewProps> = ({ tab, query, onActivateTabB
     setOpenClamps(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const highlightText = (text: string, q: string): string => {
-    if (!q) return esc(text);
-    const norm = normalize(text);
-    const nq = normalize(q);
-    let out = '';
-    let i = 0;
-    while (true) {
-      const idx = norm.indexOf(nq, i);
-      if (idx === -1) {
-        out += esc(text.slice(i));
-        break;
-      }
-      out += esc(text.slice(i, idx)) + '<mark>' + esc(text.slice(idx, idx + nq.length)) + '</mark>';
-      i = idx + nq.length;
+  const renderSegments = (segments: ReturnType<typeof richTextSegments>) => segments.map((segment, i) => {
+    const content = segment.type === 'mark' ? <mark>{segment.text}</mark> : segment.text;
+    if (segment.href) {
+      return <a key={i} href={segment.href} target="_blank" rel="noopener noreferrer">{content}</a>;
     }
-    return out;
-  };
+    return segment.type === 'mark' ? <React.Fragment key={i}>{content}</React.Fragment> : <React.Fragment key={i}>{segment.text}</React.Fragment>;
+  });
 
   const renderCellContent = (cell: GridCell, rowIdx: number, colIdx: number) => {
     const text = cell.v || '';
@@ -60,39 +51,31 @@ export const TableView: React.FC<TableViewProps> = ({ tab, query, onActivateTabB
     const clampKey = `${rowIdx}-${colIdx}`;
     const isOpen = Boolean(openClamps[clampKey] || isFiltered);
 
-    let innerHtml = '';
-    if (link && /^(https?:|mailto:)/i.test(link)) {
-      innerHtml = text.length > 40
-        ? `${linkify(highlightText(text, query))} <a href="${esc(link)}" target="_blank" rel="noopener noreferrer">🔗 Open link</a>`
-        : `<a href="${esc(link)}" target="_blank" rel="noopener noreferrer">${highlightText(text || link, query)}</a>`;
-    } else if (link) {
-      const match = link.match(/^#'?([^'!]+)'?!/);
-      const tabTarget = match ? match[1] : '';
-      innerHtml = tabTarget
-        ? `<a href="#" class="cursor-pointer font-bold text-[var(--accent-contrast)] underline" data-tab-name="${esc(tabTarget)}">${highlightText(text || tabTarget, query)}</a>`
-        : highlightText(text, query);
+    const safeHref = safeCellHref(link);
+    const tabTarget = !safeHref ? tabLinkTarget(link) : null;
+    let content: React.ReactNode;
+    if (safeHref) {
+      content = text.length > 40
+        ? <>{renderSegments(richTextSegments(text, query))} <a href={safeHref} target="_blank" rel="noopener noreferrer">🔗 Open link</a></>
+        : <a href={safeHref} target="_blank" rel="noopener noreferrer">{renderSegments(highlightTextSegments(text || link, query))}</a>;
+    } else if (tabTarget) {
+      content = <button
+        type="button"
+        className="cursor-pointer font-bold text-[var(--accent-contrast)] underline bg-transparent border-0 p-0"
+        onClick={() => onActivateTabByName(tabTarget)}
+      >{renderSegments(highlightTextSegments(text || tabTarget, query))}</button>;
     } else {
-      innerHtml = linkify(highlightText(text, query));
+      content = renderSegments(link ? highlightTextSegments(text, query) : richTextSegments(text, query));
     }
 
     const needsClamp = text.length > 240 || text.split('\n').length > 7;
 
     return (
-      <div
-        onClick={e => {
-          const target = e.target as HTMLElement;
-          const targetName = target.getAttribute('data-tab-name');
-          if (targetName) {
-            e.preventDefault();
-            onActivateTabByName(targetName);
-          }
-        }}
-      >
+      <div>
         <div
           dir="auto"
           className={needsClamp ? `xt-clamp ${isOpen ? 'open' : ''}` : ''}
-          dangerouslySetInnerHTML={{ __html: innerHtml }}
-        />
+        >{content}</div>
         {needsClamp && !isFiltered && (
           <button
             type="button"

@@ -15,7 +15,9 @@ import { NotesModal } from './components/NotesModal';
 import { TableView } from './components/TableView';
 import { AdminPanel } from './components/AdminPanel';
 import { registerOrUpdateMember } from './utils/adminManagementRest';
+import { MAIN_ADMIN_EMAIL } from './utils/accessPayloads';
 import { defaultSearchScope } from './utils/searchScope';
+import { tabLabel } from './utils/tabLabel';
 import { fetchSession, fetchActiveKb } from './utils/session';
 import { createPointerWatcher } from './utils/pointerWatcher';
 import {
@@ -42,7 +44,7 @@ import {
 } from 'lucide-react';
 
 const THEME_KEY = 'kb-theme';
-const BOOTSTRAP_EMAIL = 'breadfast.hotfood@gmail.com';
+const BOOTSTRAP_EMAIL = MAIN_ADMIN_EMAIL;
 
 export default function App() {
   // Theme state
@@ -646,8 +648,9 @@ export default function App() {
               }}
               role="tab"
               aria-selected={idx === activeTabIdx}
+              title={tabLabel(tab.name, idx)}
             >
-              {tab.name.trim() || `Sheet ${idx + 1}`}
+              {tabLabel(tab.name, idx)}
             </button>
           ))}
         </div>

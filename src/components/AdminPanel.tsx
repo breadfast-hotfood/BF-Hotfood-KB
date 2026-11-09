@@ -8,6 +8,7 @@ import { useBackdropClose } from '../utils/backdropClose';
 import { orderVersions, visibleVersions, deletableVersions, isDeletable, canRollback } from '../utils/versionList';
 import { BlockedEmailsTab } from './BlockedEmailsTab';
 import { RulesSelfTestPanel } from './RulesSelfTestPanel';
+import { MAIN_ADMIN_EMAIL } from '../utils/accessPayloads';
 
 interface AdminPanelProps {
   currentUser: AuthUser;
@@ -56,6 +57,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const isMainAdmin = currentUser.role === 'Main Admin';
   const backdrop = useBackdropClose(onClose);
   const [activeTab, setActiveTab] = useState<'kb-manage' | 'admins' | 'blocked' | 'rules-selftest' | 'overview'>('kb-manage');
+
+  useEffect(() => {
+    if (!isMainAdmin && activeTab === 'rules-selftest') setActiveTab('kb-manage');
+  }, [isMainAdmin, activeTab]);
 
   // KB Ingestion State
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -419,17 +424,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <span>Blocked emails</span>
               </button>
             )}
-            <button
-              onClick={() => setActiveTab('rules-selftest')}
-              className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 ${
-                activeTab === 'rules-selftest'
-                  ? 'bg-[var(--panel)] text-[var(--accent-contrast)] shadow-sm font-bold'
-                  : 'text-[var(--muted)] hover:text-[var(--text)]'
-              }`}
-            >
-              <ShieldCheck className="w-3.5 h-3.5" />
-              <span>Rules Self-Test</span>
-            </button>
+            {isMainAdmin && (
+              <button
+                onClick={() => setActiveTab('rules-selftest')}
+                className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+                  activeTab === 'rules-selftest'
+                    ? 'bg-[var(--panel)] text-[var(--accent-contrast)] shadow-sm font-bold'
+                    : 'text-[var(--muted)] hover:text-[var(--text)]'
+                }`}
+              >
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Rules Self-Test</span>
+              </button>
+            )}
             <button
               onClick={() => setActiveTab('overview')}
               className={`px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap ${
@@ -458,7 +465,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               />
             )}
 
-            {activeTab === 'rules-selftest' && (
+            {activeTab === 'rules-selftest' && isMainAdmin && (
               <RulesSelfTestPanel
                 currentUser={currentUser}
                 onShowToast={onShowToast}
@@ -471,7 +478,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <h4 className="font-bold text-sm text-[var(--text)] mb-2">Breadfast Company Access Model</h4>
                   <ul className="list-disc list-inside space-y-1.5 text-[var(--muted)] leading-relaxed">
                     <li><strong>All @breadfast.com Accounts:</strong> Any employee with a verified company Google email can sign in and read the Knowledge Base. No per-user import or allowlist is required.</li>
-                    <li><strong>Main Admin:</strong> Permanently anchored in security rules to <code>breadfast.hotfood@gmail.com</code> (immutable). Can manage KB, grant/revoke Admins, and block company emails.</li>
+                    <li><strong>Main Admin:</strong> Permanently anchored in security rules to <code>{MAIN_ADMIN_EMAIL}</code> (immutable). Can manage KB, grant/revoke Admins, and block company emails.</li>
                     <li><strong>Administrators:</strong> Granted company users (with an <code>admins/&#123;email&#125;</code> record). Can publish/rollback KB, view signed-in members, and grant/revoke other Admins.</li>
                     <li><strong>Offboarding (Blocked):</strong> The Main Admin can block departed employee accounts in <code>blocked/&#123;email&#125;</code>, cutting off access immediately.</li>
                     <li><strong>External Accounts:</strong> All non-company Google accounts (and other @gmail.com accounts) are strictly denied by Firestore security rules.</li>

@@ -3,6 +3,7 @@ import { AuthUser } from '../types';
 import firebaseConfig from '../../firebase-applet-config.json';
 import { toFirestoreValue } from '../utils/firestoreRest';
 import { listCollectionDocs } from '../utils/firestoreList';
+import { MAIN_ADMIN_EMAIL } from '../utils/accessPayloads';
 import {
   ShieldCheck,
   Play,
@@ -44,6 +45,7 @@ export const RulesSelfTestPanel: React.FC<RulesSelfTestPanelProps> = ({
   const API_ROOT = `https://firestore.googleapis.com/v1/${DOCS_BASE}`;
 
   const runAllTests = async () => {
+    if (!isMainAdmin) return;
     setIsRunning(true);
     setResults([]);
     const testResults: SelfTestResult[] = [];
@@ -131,18 +133,18 @@ export const RulesSelfTestPanel: React.FC<RulesSelfTestPanelProps> = ({
         recordResult(2, 'Grant Admin to non-company email', '403', r.status, r.status === 403 ? 'Denied' : 'Allowed', passed);
       }
 
-      // CASE 3: Grant Admin to breadfast.hotfood@gmail.com
+      // CASE 3: Grant Admin to the Main Admin
       // Expected: 403 / 403 (Main Admin anchor cannot have admins doc created)
-      setActiveTestName('3. Grant Admin to breadfast.hotfood@gmail.com');
+      setActiveTestName(`3. Grant Admin to ${MAIN_ADMIN_EMAIL}`);
       {
         const fields = {
-          email: toFirestoreValue('breadfast.hotfood@gmail.com'),
+          email: toFirestoreValue(MAIN_ADMIN_EMAIL),
           grantedBy: toFirestoreValue(callerEmail),
           grantedAt: toFirestoreValue(new Date().toISOString()),
         };
-        const r = await rawReq(`${API_ROOT}/admins/${encodeURIComponent('breadfast.hotfood@gmail.com')}?currentDocument.exists=false`, 'PATCH', { fields });
+        const r = await rawReq(`${API_ROOT}/admins/${encodeURIComponent(MAIN_ADMIN_EMAIL)}?currentDocument.exists=false`, 'PATCH', { fields });
         const passed = r.status === 403;
-        recordResult(3, 'Grant Admin to breadfast.hotfood@gmail.com', '403', r.status, r.status === 403 ? 'Denied' : 'Allowed', passed);
+        recordResult(3, `Grant Admin to ${MAIN_ADMIN_EMAIL}`, '403', r.status, r.status === 403 ? 'Denied' : 'Allowed', passed);
       }
 
       // CASE 4: Grant with grantedBy set to someone else
@@ -195,13 +197,13 @@ export const RulesSelfTestPanel: React.FC<RulesSelfTestPanelProps> = ({
         recordResult(7, 'Revoke disposable Admin (delete)', '200', r.status, r.status === 200 ? 'Allowed' : 'Denied', passed);
       }
 
-      // CASE 8: Delete admins/breadfast.hotfood@gmail.com
-      // Expected: 403 / 403 (rules block target != 'breadfast.hotfood@gmail.com')
-      setActiveTestName('8. Delete admins/breadfast.hotfood@gmail.com');
+      // CASE 8: Delete the Main Admin record
+      // Expected: 403 / 403 (rules protect the Main Admin account)
+      setActiveTestName(`8. Delete admins/${MAIN_ADMIN_EMAIL}`);
       {
-        const r = await rawReq(`${API_ROOT}/admins/${encodeURIComponent('breadfast.hotfood@gmail.com')}`, 'DELETE');
+        const r = await rawReq(`${API_ROOT}/admins/${encodeURIComponent(MAIN_ADMIN_EMAIL)}`, 'DELETE');
         const passed = r.status === 403;
-        recordResult(8, 'Delete admins/breadfast.hotfood@gmail.com', '403', r.status, r.status === 403 ? 'Denied' : 'Allowed', passed);
+        recordResult(8, `Delete admins/${MAIN_ADMIN_EMAIL}`, '403', r.status, r.status === 403 ? 'Denied' : 'Allowed', passed);
       }
 
       // CASE 9: Block a disposable email
@@ -219,18 +221,18 @@ export const RulesSelfTestPanel: React.FC<RulesSelfTestPanelProps> = ({
         recordResult(9, 'Block disposable email', String(exp), r.status, r.status === exp ? 'As expected' : 'Unexpected', passed);
       }
 
-      // CASE 10: Block breadfast.hotfood@gmail.com
+      // CASE 10: Block the Main Admin
       // Expected: 403 / 403
-      setActiveTestName('10. Block breadfast.hotfood@gmail.com');
+      setActiveTestName(`10. Block ${MAIN_ADMIN_EMAIL}`);
       {
         const fields = {
-          email: toFirestoreValue('breadfast.hotfood@gmail.com'),
+          email: toFirestoreValue(MAIN_ADMIN_EMAIL),
           blockedBy: toFirestoreValue(callerEmail),
           blockedAt: toFirestoreValue(new Date().toISOString()),
         };
-        const r = await rawReq(`${API_ROOT}/blocked/${encodeURIComponent('breadfast.hotfood@gmail.com')}?currentDocument.exists=false`, 'PATCH', { fields });
+        const r = await rawReq(`${API_ROOT}/blocked/${encodeURIComponent(MAIN_ADMIN_EMAIL)}?currentDocument.exists=false`, 'PATCH', { fields });
         const passed = r.status === 403;
-        recordResult(10, 'Block breadfast.hotfood@gmail.com', '403', r.status, r.status === 403 ? 'Denied' : 'Allowed', passed);
+        recordResult(10, `Block ${MAIN_ADMIN_EMAIL}`, '403', r.status, r.status === 403 ? 'Denied' : 'Allowed', passed);
       }
 
       // CASE 11: Unblock disposable email
@@ -425,6 +427,8 @@ export const RulesSelfTestPanel: React.FC<RulesSelfTestPanelProps> = ({
   const totalRun = results.length;
   const passCount = results.filter(r => r.passed).length;
   const failCount = results.filter(r => !r.passed).length;
+
+  if (!isMainAdmin) return <p className="text-xs text-[var(--muted)]">Main Admin only.</p>;
 
   return (
     <div className="space-y-6">

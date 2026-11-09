@@ -14,9 +14,11 @@ import { listCollectionDocs } from './firestoreList';
 import { publishWorkbook, loadActiveWorkbook as loadFromStore } from './kbPublish';
 import { computeKBDryRun } from './kbDiffEngine';
 import { withoutDividerAnnotationNotes } from './notesCleanup';
+import { MAIN_ADMIN_EMAIL } from './accessPayloads';
 import type { Workbook } from '../types';
 
-export const MAIN_ADMIN_EMAIL = 'breadfast.hotfood@gmail.com';
+export { MAIN_ADMIN_EMAIL };
+
 const COMPANY_RE = /^[^@]+@breadfast\.com$/i;
 
 export interface LocalApiOptions {
