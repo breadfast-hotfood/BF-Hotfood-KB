@@ -640,6 +640,7 @@ export default function App() {
               key={idx}
               className={`tab ${idx === activeTabIdx ? 'active' : ''}`}
               onClick={() => {
+                if (idx !== activeTabIdx) setSearchQuery('');
                 setActiveTabIdx(idx);
                 setActiveSection(null);
                 setActiveComplaintType(null);
@@ -774,7 +775,10 @@ export default function App() {
                     const idx = workbook?.tabs.findIndex(
                       t => t.name.trim().toLowerCase() === targetName.trim().toLowerCase()
                     );
-                    if (idx !== undefined && idx >= 0) setActiveTabIdx(idx);
+                    if (idx !== undefined && idx >= 0 && idx !== activeTabIdx) {
+                      setSearchQuery('');
+                      setActiveTabIdx(idx);
+                    }
                   }}
                 />
               ) : (
