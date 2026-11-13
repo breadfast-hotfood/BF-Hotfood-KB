@@ -55,6 +55,7 @@ export interface Workbook {
   fileName: string;
   versionId?: string;
   isSample?: boolean;
+  hiddenColumnsOmitted?: { sheetName: string; column: string; heading: string }[];
 }
 
 export interface SearchResult {

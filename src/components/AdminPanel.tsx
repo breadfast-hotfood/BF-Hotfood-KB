@@ -497,7 +497,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <h4 className="text-xs font-bold text-[var(--text)]">Knowledge Base File Ingestion & Pre-Flight Review</h4>
                   </div>
                   <p className="text-xs text-[var(--muted)]">
-                    Upload an updated workbook (e.g. <code>Chatting_Team_KB.xlsx</code>). The file is parsed completely in the browser with <code>FileReader → Uint8Array → XLSX.read(data, &#123;type:'array'&#125;)</code>, generating an instant pre-flight dry-run review before sending anything to the server.
+                    Upload an updated workbook (e.g. <code>Chatting_Team_KB.xlsx</code>). The file is parsed completely in the browser with <code>FileReader → Uint8Array → XLSX.read(data, &#123;type:'array'&#125;)</code>, generating an instant pre-flight dry-run review before sending anything to the server. Hidden columns in Excel files are omitted from the new version; CSV files do not retain hidden-column information.
                   </p>
 
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
@@ -514,6 +514,20 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </span>
                     )}
                   </div>
+
+                  {!!parsedWorkbook?.hiddenColumnsOmitted?.length && (
+                    <div className="p-3 bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 rounded-lg text-xs space-y-1">
+                      <p className="font-bold text-amber-900 dark:text-amber-200">Hidden columns will be excluded from this upload:</p>
+                      <ul className="list-disc pl-5 text-amber-800 dark:text-amber-300 space-y-0.5">
+                        {parsedWorkbook.hiddenColumnsOmitted.map((column, idx) => (
+                          <li key={`${column.sheetName}-${column.column}-${idx}`}>
+                            {column.sheetName} — column {column.column}{column.heading ? ` (${column.heading})` : ''}
+                          </li>
+                        ))}
+                      </ul>
+                      <p className="text-amber-800 dark:text-amber-300">This exclusion applies to cards, search, and the table in the newly published version. Review the dry-run before publishing.</p>
+                    </div>
+                  )}
 
                   {actionError && (
                     <div className="p-2.5 bg-red-50 text-red-700 dark:bg-red-950/60 dark:text-red-300 rounded-lg text-xs flex items-center gap-2">

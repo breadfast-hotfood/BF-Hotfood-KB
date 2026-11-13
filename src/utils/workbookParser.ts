@@ -123,9 +123,33 @@ export function readSheetGrid(ws: XLSX.WorkSheet | undefined): GridCell[][] {
 
   if (fr < 0) return [];
 
+  const hiddenColumns = new Set<number>();
+  (ws['!cols'] || []).forEach((column, index) => {
+    if (column?.hidden) hiddenColumns.add(index);
+  });
+  const visibleColumns: number[] = [];
+  for (let c = fc; c <= lc; c++) if (!hiddenColumns.has(c)) visibleColumns.push(c);
+
   return g.slice(fr, lr + 1).map(row => {
-    return row.slice(fc, lc + 1).map(x => {
-      return x && x.cov ? { cov: [x.cov[0] - fr, x.cov[1] - fc] } : (x as GridCell);
+    return visibleColumns.map(sourceCol => {
+      const x = row[sourceCol];
+      if (!x) return null as unknown as GridCell;
+      if (x.cov) {
+        const masterCol = x.cov[1];
+        if (hiddenColumns.has(masterCol)) return null as unknown as GridCell;
+        const mappedMasterCol = visibleColumns.indexOf(masterCol);
+        return mappedMasterCol < 0
+          ? null as unknown as GridCell
+          : { cov: [x.cov[0] - fr, mappedMasterCol] };
+      }
+
+      const cell = x as GridCell;
+      if (cell.cs && cell.cs > 1) {
+        const sourceEnd = sourceCol + cell.cs - 1;
+        const visibleSpan = visibleColumns.filter(c => c >= sourceCol && c <= sourceEnd).length;
+        return { ...cell, cs: visibleSpan || 1 };
+      }
+      return cell;
     });
   });
 }
@@ -328,9 +352,38 @@ export function finalizeKB(p: KBData): KBData {
   return p;
 }
 
-export function buildTabs(wb: XLSX.WorkBook): Tab[] {
+function columnHeading(ws: XLSX.WorkSheet, columnIndex: number): string {
+  if (!ws['!ref']) return '';
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  const endRow = Math.min(range.e.r, range.s.r + 19);
+  let headerRow = -1;
+  for (let r = range.s.r; r <= endRow; r++) {
+    for (let c = range.s.c; c <= range.e.c; c++) {
+      const value = cellStr(ws[XLSX.utils.encode_cell({ r, c })]?.w ?? ws[XLSX.utils.encode_cell({ r, c })]?.v);
+      if (/complaint\s*type/i.test(value)) {
+        headerRow = r;
+        break;
+      }
+    }
+    if (headerRow >= 0) break;
+  }
+  if (headerRow < 0) headerRow = Math.min(range.e.r, range.s.r + 2);
+  const cell = ws[XLSX.utils.encode_cell({ r: headerRow, c: columnIndex })];
+  return cellStr(cell?.w ?? cell?.v);
+}
+
+export function buildTabs(wb: XLSX.WorkBook, hiddenColumnsOmitted: NonNullable<Workbook['hiddenColumnsOmitted']> = []): Tab[] {
   const tabs: Tab[] = [];
   wb.SheetNames.forEach(name => {
+    const ws = wb.Sheets[name];
+    (ws?.['!cols'] || []).forEach((column, columnIndex) => {
+      if (!column?.hidden) return;
+      hiddenColumnsOmitted.push({
+        sheetName: name,
+        column: XLSX.utils.encode_col(columnIndex),
+        heading: columnHeading(ws, columnIndex),
+      });
+    });
     const tab: Tab = {
       name,
       kind: 'table',
@@ -342,16 +395,21 @@ export function buildTabs(wb: XLSX.WorkBook): Tab[] {
 
     try {
       try {
-        tab.grid = readSheetGrid(wb.Sheets[name]);
+        tab.grid = readSheetGrid(ws);
       } catch (e1) {
         console.error('grid', name, e1);
-        const jsonRows: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[name], {
+        const hiddenColumns = new Set<number>();
+        (ws?.['!cols'] || []).forEach((column, columnIndex) => {
+          if (column?.hidden) hiddenColumns.add(columnIndex);
+        });
+        const jsonRows: any[][] = XLSX.utils.sheet_to_json(ws, {
           header: 1,
           defval: '',
           raw: false,
         });
         tab.grid = jsonRows.map(row =>
-          row.map(v => (v === '' || v === null ? null : { v: String(v), l: '', rs: 1, cs: 1 }))
+          row.filter((_, columnIndex) => !hiddenColumns.has(columnIndex))
+            .map(v => (v === '' || v === null ? null : { v: String(v), l: '', rs: 1, cs: 1 }))
         ) as any;
       }
 
@@ -392,11 +450,13 @@ export function buildTabs(wb: XLSX.WorkBook): Tab[] {
 
 export function parseWorkbookBytes(data: Uint8Array | ArrayBuffer, fileName: string): Workbook {
   const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-  const wb = XLSX.read(bytes, { type: 'array' });
-  const tabs = buildTabs(wb);
+  const wb = XLSX.read(bytes, { type: 'array', cellStyles: true });
+  const hiddenColumnsOmitted: NonNullable<Workbook['hiddenColumnsOmitted']> = [];
+  const tabs = buildTabs(wb, hiddenColumnsOmitted);
   return {
     tabs,
     fileName,
+    hiddenColumnsOmitted,
   };
 }
 
