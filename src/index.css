@@ -8,6 +8,8 @@
   --panel: #fcfefc;
   --panel-2: #edf4ee;
   --line: #d8e5db;
+  --card-hover-bg: #f0f8f1;
+  --card-hover-border: #c8ded0;
   --text: #202522;
   --muted: #58645b;
   --muted-2: #819087;
@@ -42,6 +44,8 @@ html[data-theme="dark"] {
   --panel: #1b211d;
   --panel-2: #242c26;
   --line: #354239;
+  --card-hover-bg: #242c26;
+  --card-hover-border: #46574a;
   --text: #edf3ee;
   --muted: #a1ada4;
   --muted-2: #7d8b81;
@@ -496,10 +500,12 @@ button:focus-visible, select:focus-visible {
   flex-direction: column;
   gap: 6px;
   overflow: hidden;
-  transition: transform 0.12s;
+  transition: transform 0.16s ease, background-color 0.18s ease, border-color 0.18s ease;
 }
 
 .card:hover {
+  border-color: var(--card-hover-border);
+  background: var(--card-hover-bg);
   transform: translateY(-1px);
 }
 
