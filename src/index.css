@@ -496,12 +496,10 @@ button:focus-visible, select:focus-visible {
   flex-direction: column;
   gap: 6px;
   overflow: hidden;
-  transition: transform 0.12s, border-color 0.12s, background 0.12s;
+  transition: transform 0.12s;
 }
 
 .card:hover {
-  border-color: var(--muted-2);
-  background: var(--panel-2);
   transform: translateY(-1px);
 }
 
