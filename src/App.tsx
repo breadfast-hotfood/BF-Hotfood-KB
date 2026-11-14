@@ -422,7 +422,7 @@ export default function App() {
       <header className="topbar">
         {/* Brand */}
         <div className="brand">
-          <div className="brand-mark">CX</div>
+          <div className="brand-mark"><img src={`${import.meta.env.BASE_URL}breadfast-mark.png`} alt="Breadfast logo" /></div>
           <div className="brand-text">
             <div className="flex items-center gap-2">
               <b>Breadfast KB</b>

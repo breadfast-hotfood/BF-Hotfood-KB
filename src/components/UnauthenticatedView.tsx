@@ -15,8 +15,8 @@ export const UnauthenticatedView: React.FC<UnauthenticatedViewProps> = ({
   return (
     <div className="min-h-[calc(100vh-57px)] flex items-center justify-center p-6 bg-[var(--bg)]">
       <div className="max-w-md w-full bg-[var(--panel)] border border-[var(--line)] rounded-2xl p-8 shadow-xl text-center flex flex-col items-center">
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-[#5b8cff] to-[#2554c7] flex items-center justify-center font-extrabold text-white text-2xl mb-6 shadow-md">
-          CX
+        <div className="w-16 h-16 rounded-2xl bg-[var(--brand-mint)] flex items-center justify-center mb-6 shadow-md overflow-hidden">
+          <img src={`${import.meta.env.BASE_URL}breadfast-mark.png`} alt="Breadfast logo" className="h-full w-full object-contain" />
         </div>
 
         <h2 className="text-2xl font-extrabold text-[var(--text)] tracking-tight mb-2">
@@ -36,7 +36,7 @@ export const UnauthenticatedView: React.FC<UnauthenticatedViewProps> = ({
         <button
           onClick={onSignIn}
           disabled={isLoading}
-          className="w-full flex items-center justify-center gap-3 px-5 py-3 rounded-xl font-bold text-sm bg-white text-slate-800 border border-slate-300 hover:bg-slate-50 transition-all shadow-sm active:scale-[0.98] disabled:opacity-60 cursor-pointer"
+          className="w-full flex items-center justify-center gap-3 px-5 py-3 rounded-xl font-bold text-sm bg-[var(--accent)] text-[var(--btn-primary-text)] border border-[var(--accent)] hover:opacity-90 transition-all shadow-sm active:scale-[0.98] disabled:opacity-60 cursor-pointer"
         >
           {/* Google SVG icon */}
           <svg className="w-5 h-5" viewBox="0 0 24 24">

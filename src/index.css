@@ -1,31 +1,34 @@
 @import "tailwindcss";
 
 :root {
-  --bg: #f3f4f7;
-  --panel: #ffffff;
-  --panel-2: #f0f1f5;
-  --line: #dde1e8;
-  --text: #1b2028;
-  --muted: #5b6472;
-  --muted-2: #8891a0;
-  --accent: #7c5cff;
-  --accent-dim: #ece7ff;
-  --accent-contrast: #4a3b8c;
+  --brand-plum: #5b0b56;
+  --brand-plum-hover: #74156c;
+  --brand-mint: #ecfeed;
+  --bg: #f3f7f3;
+  --panel: #fcfefc;
+  --panel-2: #edf4ee;
+  --line: #d8e5db;
+  --text: #202522;
+  --muted: #58645b;
+  --muted-2: #819087;
+  --accent: var(--brand-plum);
+  --accent-dim: #e8f4ea;
+  --accent-contrast: #4b1247;
   --red: #d92d3c;
   --red-dim: #fbe4e5;
   --green: #158a5a;
   --yellow: #b5820a;
   --grey: #8b95a3;
-  --scrollbar-thumb: #c7cdd6;
-  --refund-bg: #eaf1ff;
-  --refund-border: #b9d0fb;
-  --refund-label: #2554c7;
-  --comp-bg: #e8f8f0;
-  --comp-border: #b8e8cf;
-  --comp-glow: rgba(21, 138, 90, 0.55);
-  --comp-comet: #16a34a;
+  --scrollbar-thumb: #c5d4c9;
+  --refund-bg: #f2eaf1;
+  --refund-border: #dfc7dc;
+  --refund-label: #5b0b56;
+  --comp-bg: #e8f6eb;
+  --comp-border: #c4e4cb;
+  --comp-glow: rgba(72, 139, 91, 0.45);
+  --comp-comet: #408b52;
   --btn-primary-text: #ffffff;
-  --btn-primary-hover: #6a4ce0;
+  --btn-primary-hover: var(--brand-plum-hover);
   --shadow: 0 24px 70px rgba(20, 24, 32, 0.18);
   --mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --sans: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -34,31 +37,32 @@
 }
 
 html[data-theme="dark"] {
-  --bg: #12151b;
-  --panel: #181c24;
-  --panel-2: #1e232c;
-  --line: #2a313d;
-  --text: #e8ecf1;
-  --muted: #8891a0;
-  --muted-2: #5b6472;
-  --accent: #8b6cff;
-  --accent-dim: #4a3b8c;
-  --accent-contrast: #e2d9ff;
+  --brand-mint: #b9e2c2;
+  --bg: #141816;
+  --panel: #1b211d;
+  --panel-2: #242c26;
+  --line: #354239;
+  --text: #edf3ee;
+  --muted: #a1ada4;
+  --muted-2: #7d8b81;
+  --accent: #b9e2c2;
+  --accent-dim: #293a2e;
+  --accent-contrast: #e0f1e4;
   --red: #ff5a5f;
   --red-dim: #4a2426;
   --green: #3dd68c;
   --yellow: #ffd166;
   --grey: #6b7280;
-  --scrollbar-thumb: #2f3641;
-  --refund-bg: #152238;
-  --refund-border: #2c4a7a;
-  --refund-label: #5b8cff;
-  --comp-bg: #132b26;
-  --comp-border: #1f5449;
-  --comp-glow: rgba(61, 214, 140, 0.65);
-  --comp-comet: #4ade80;
-  --btn-primary-text: #fff;
-  --btn-primary-hover: #7aa5ff;
+  --scrollbar-thumb: #435249;
+  --refund-bg: #322632;
+  --refund-border: #62475d;
+  --refund-label: #e5cce1;
+  --comp-bg: #20362a;
+  --comp-border: #385b43;
+  --comp-glow: rgba(151, 214, 166, 0.55);
+  --comp-comet: #a3dfae;
+  --btn-primary-text: #251526;
+  --btn-primary-hover: #9fd5aa;
   --shadow: 0 24px 70px rgba(0, 0, 0, 0.55);
 }
 
@@ -113,17 +117,24 @@ input, select, button { font-size: inherit; color: inherit; }
 }
 
 .brand-mark {
-  width: 28px;
-  height: 28px;
-  border-radius: 7px;
-  background: linear-gradient(135deg, #5b8cff, #2554c7);
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--brand-mint);
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
   font-size: 13px;
-  color: #fff;
   flex-shrink: 0;
+}
+
+.brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .brand-text {
@@ -227,8 +238,10 @@ input, select, button { font-size: inherit; color: inherit; }
   transition: background 0.15s, border-color 0.15s;
 }
 
-.btn:hover {
-  border-color: var(--muted-2);
+.btn:not(.primary):hover {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent-contrast);
 }
 
 .btn.primary {
@@ -274,7 +287,8 @@ input, select, button { font-size: inherit; color: inherit; }
 }
 
 .tab:hover {
-  background: var(--panel-2);
+  background: var(--accent-dim);
+  color: var(--accent-contrast);
 }
 
 .tab.active {
@@ -282,6 +296,11 @@ input, select, button { font-size: inherit; color: inherit; }
   background: color-mix(in srgb, var(--accent) 14%, transparent);
   color: var(--accent-contrast);
   border-color: color-mix(in srgb, var(--accent) 38%, transparent);
+}
+
+button:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 /* Layout */

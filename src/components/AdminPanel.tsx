@@ -547,19 +547,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           Pre-Flight Dry-Run Inspection Report: {dryRunReport.fileName}
                         </h4>
                       </div>
-                      <span className="text-[10px] font-mono bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 px-2 py-0.5 rounded font-bold">
+                      <span className="text-[10px] font-mono bg-[var(--accent-dim)] text-[var(--accent-contrast)] px-2 py-0.5 rounded font-bold">
                         Browser Dry-Run (Non-Destructive)
                       </span>
                     </div>
 
                     {/* Active KB Context Banner */}
                     {dryRunReport.isActiveSample ? (
-                      <div className="p-3 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-lg text-xs space-y-1">
-                        <div className="flex items-center gap-2 font-bold text-blue-900 dark:text-blue-200">
-                          <CheckCircle2 className="w-4 h-4 shrink-0 text-blue-600 dark:text-blue-400" />
+                      <div className="p-3 bg-[var(--accent-dim)] border border-[var(--accent)]/25 rounded-lg text-xs space-y-1">
+                        <div className="flex items-center gap-2 font-bold text-[var(--accent-contrast)]">
+                          <CheckCircle2 className="w-4 h-4 shrink-0 text-[var(--accent)]" />
                           <span>Active KB: Sample data - not a published version</span>
                         </div>
-                        <p className="text-blue-800 dark:text-blue-300 text-[11px] leading-relaxed">
+                        <p className="text-[var(--accent-contrast)] text-[11px] leading-relaxed">
                           This import will publish your first official Knowledge Base version, replacing the initial sample data. No false drop or missing-tab warnings are raised against sample data.
                         </p>
                       </div>
@@ -573,7 +573,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       </div>
                       <div className="bg-[var(--panel-2)] p-2 rounded-lg border border-[var(--line)]">
                         <span className="text-[10px] text-[var(--muted-2)] uppercase block font-mono">Updated</span>
-                        <span className="text-sm font-bold text-blue-600 dark:text-blue-400">{dryRunReport.overallUpdated}</span>
+                        <span className="text-sm font-bold text-[var(--accent)]">{dryRunReport.overallUpdated}</span>
                       </div>
                       <div className="bg-[var(--panel-2)] p-2 rounded-lg border border-[var(--line)]">
                         <span className="text-[10px] text-[var(--muted-2)] uppercase block font-mono">Unchanged</span>
@@ -621,7 +621,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <th className="p-2">Sheet / Tab</th>
                             <th className="p-2 text-center">Before → After</th>
                             <th className="p-2 text-center text-[var(--green)]">Added</th>
-                            <th className="p-2 text-center text-blue-500">Updated</th>
+                            <th className="p-2 text-center text-[var(--accent)]">Updated</th>
                             <th className="p-2 text-center text-[var(--muted)]">Same</th>
                             <th className="p-2 text-center text-amber-500">Removed</th>
                             <th className="p-2 text-center text-[var(--red)]">Rejected</th>
@@ -639,7 +639,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <td className="p-2 text-center font-mono text-[var(--green)] font-semibold">
                                 {t.addedCount > 0 ? `+${t.addedCount}` : '0'}
                               </td>
-                              <td className="p-2 text-center font-mono text-blue-500">
+                              <td className="p-2 text-center font-mono text-[var(--accent)]">
                                 {t.updatedCount}
                               </td>
                               <td className="p-2 text-center font-mono text-[var(--muted)]">
@@ -749,7 +749,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               <td className="p-2.5 font-mono text-[11px] font-bold">
                                 {v.versionId}
                                 {(v.isDefault || v.isSample) && (
-                                  <span className="ml-1.5 px-2 py-0.5 bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 rounded text-[9px] font-semibold">
+                                  <span className="ml-1.5 px-2 py-0.5 bg-[var(--accent-dim)] text-[var(--accent-contrast)] rounded text-[9px] font-semibold">
                                     Sample data - not a published version
                                   </span>
                                 )}
