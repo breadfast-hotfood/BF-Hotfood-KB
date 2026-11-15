@@ -3,11 +3,20 @@ import { readFileSync, existsSync } from 'node:fs';
 import { orderVersions, visibleVersions, isDeletable, deletableVersions, canRollback, DEFAULT_VISIBLE_VERSIONS } from '../src/utils/versionList';
 import { shouldCloseOnBackdrop } from '../src/utils/backdropClose';
 import { withoutDividerAnnotationNotes } from '../src/utils/notesCleanup';
+import { displayCaseNumber } from '../src/utils/kbUtils';
 import { tabLabel } from '../src/utils/tabLabel';
 import { shouldCollapse, COLLAPSE_MAX_CHARS, COLLAPSE_MAX_WORDS, COLLAPSE_MAX_LINES } from '../src/utils/collapse';
 
 let n = 0; const ok = (m: string) => { n++; console.log('  ✓', m); };
 const v = (id: string, extra: any = {}) => ({ versionId: id, publishedAt: `2026-10-${String(extra.day ?? 1).padStart(2, '0')}T10:00:00.000Z`, ...extra });
+
+// ----- display case numbering -----
+{
+  const records = [5, 6, 9].map(_row => ({ _section: 'General', _row, fields: {} }));
+  assert.deepEqual(records.map(rec => displayCaseNumber(rec, records)), [1, 2, 3]);
+  assert.deepEqual(records.map(rec => rec._row), [5, 6, 9]);
+  ok('display case numbers are sequential while Excel source row numbers remain unchanged');
+}
 
 // ----- version list rules -----
 {

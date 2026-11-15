@@ -23,6 +23,7 @@ import { createPointerWatcher } from './utils/pointerWatcher';
 import {
   splitHeader,
   isCritical,
+  displayCaseNumber,
   recordDisplayTitle,
   descValue,
   searchRecords,
@@ -835,7 +836,7 @@ export default function App() {
                               <span className="card-section">
                                 {rec._section.replace(/\s*\(Critical\)/i, '') || 'General'}
                               </span>
-                              <span className="card-tag">#{String(rec._row).padStart(3, '0')}</span>
+                              <span className="card-tag">#{String(displayCaseNumber(rec, activeKB?.records)).padStart(3, '0')}</span>
                             </div>
 
                             <div className="card-title">{title}</div>

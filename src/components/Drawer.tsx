@@ -3,6 +3,7 @@ import { RecordItem, KBData, FieldOrder } from '../types';
 import {
   splitHeader,
   isCritical,
+  displayCaseNumber,
   recordDisplayTitle,
   descValue,
   isRTLText,
@@ -87,7 +88,7 @@ export const Drawer: React.FC<DrawerProps> = ({ record, kb, onClose, onShowToast
           <div className={`drawer-stripe ${crit ? 'critical' : ''}`} />
           <div className="drawer-head-text">
             <div className="drawer-eyebrow">
-              {record._section ? `${record._section} · ` : ''}Case #{String(record._row).padStart(3, '0')}
+              {record._section ? `${record._section} · ` : ''}Case #{String(displayCaseNumber(record, kb.records)).padStart(3, '0')}
             </div>
             <div className="drawer-title">{title}</div>
             {desc && <div className="drawer-desc" dir="auto">{desc}</div>}

@@ -69,13 +69,18 @@ export function isCritical(section: string): boolean {
   return /critical/i.test(section || '');
 }
 
+export function displayCaseNumber(rec: RecordItem, records: readonly RecordItem[] | null | undefined): number {
+  const index = records?.findIndex(candidate => candidate._row === rec._row) ?? -1;
+  return index >= 0 ? index + 1 : rec._row;
+}
+
 export function recordDisplayTitle(rec: RecordItem, kb: KBData | null): string {
   const pv = primaryValue(rec, kb);
   if (pv) return pv;
   const ct = fieldValue(rec, 'Complaint Type');
   if (ct) return ct;
   const cat = fieldValue(rec, 'Category');
-  return cat || `Case #${rec._row}`;
+  return cat || `Case #${displayCaseNumber(rec, kb?.records)}`;
 }
 
 export function cellStr(v: any): string {
