@@ -291,8 +291,9 @@ input, select, button { font-size: inherit; color: inherit; }
 }
 
 .tab:hover {
-  background: var(--accent-dim);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
   color: var(--accent-contrast);
+  border-color: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 .tab.active {
