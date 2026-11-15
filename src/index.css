@@ -25,6 +25,8 @@
   --refund-bg: #f2eaf1;
   --refund-border: #dfc7dc;
   --refund-label: #5b0b56;
+  --refund-glow: rgba(91, 11, 86, 0.42);
+  --refund-comet: #6e2a67;
   --comp-bg: #e8f6eb;
   --comp-border: #c4e4cb;
   --comp-glow: rgba(72, 139, 91, 0.45);
@@ -61,6 +63,8 @@ html[data-theme="dark"] {
   --refund-bg: #322632;
   --refund-border: #62475d;
   --refund-label: #e5cce1;
+  --refund-glow: rgba(220, 170, 214, 0.48);
+  --refund-comet: #e0b4da;
   --comp-bg: #20362a;
   --comp-border: #385b43;
   --comp-glow: rgba(151, 214, 166, 0.55);
@@ -748,8 +752,12 @@ mark {
 
 /* Field highlight treatments */
 .field.is-highlighted .field-value {
+  position: relative;
+  overflow: visible;
   background: var(--refund-bg);
   border-color: var(--refund-border);
+  --field-highlight-glow: var(--refund-glow);
+  animation: field-highlight-pulse 2.2s ease-in-out infinite;
 }
 .field.is-highlighted .field-label {
   color: var(--refund-label);
@@ -760,19 +768,20 @@ mark {
   overflow: visible;
   background: var(--comp-bg);
   border-color: var(--comp-border);
-  animation: comp-pulse 2.2s ease-in-out infinite;
+  --field-highlight-glow: var(--comp-glow);
+  animation: field-highlight-pulse 2.2s ease-in-out infinite;
 }
 .field.is-highlighted-alt .field-label {
   color: var(--green);
 }
 
-@keyframes comp-pulse {
-  0% { box-shadow: 0 0 0 0 var(--comp-glow); }
+@keyframes field-highlight-pulse {
+  0% { box-shadow: 0 0 0 0 var(--field-highlight-glow); }
   70% { box-shadow: 0 0 0 10px rgba(0, 0, 0, 0); }
   100% { box-shadow: 0 0 0 0 rgba(0, 0, 0, 0); }
 }
 
-.comp-orbit-svg {
+.comp-orbit-svg, .refund-orbit-svg {
   position: absolute;
   top: -1px;
   left: -1px;
@@ -783,15 +792,23 @@ mark {
   overflow: visible;
 }
 
-.comp-orbit-rect {
+.comp-orbit-rect, .refund-orbit-rect {
   fill: none;
-  stroke: var(--comp-comet);
-  stroke-width: 2.5px;
+  stroke-width: 2px;
   stroke-linecap: round;
   stroke-dasharray: 18 82;
   vector-effect: non-scaling-stroke;
   animation: comp-orbit-dash 3.6s linear infinite;
+}
+
+.comp-orbit-rect {
+  stroke: var(--comp-comet);
   filter: drop-shadow(0 0 3px var(--comp-comet));
+}
+
+.refund-orbit-rect {
+  stroke: var(--refund-comet);
+  filter: drop-shadow(0 0 3px var(--refund-comet));
 }
 
 @keyframes comp-orbit-dash {

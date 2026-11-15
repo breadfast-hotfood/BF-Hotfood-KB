@@ -147,10 +147,10 @@ export const Drawer: React.FC<DrawerProps> = ({ record, kb, onClose, onShowToast
                     </div>
 
                     <div className="field-value">
-                      {isHighlightedAlt && (
-                        <svg className="comp-orbit-svg" aria-hidden="true">
+                      {(isHighlighted || isHighlightedAlt) && (
+                        <svg className={isHighlighted ? 'refund-orbit-svg' : 'comp-orbit-svg'} aria-hidden="true">
                           <rect
-                            className="comp-orbit-rect"
+                            className={isHighlighted ? 'refund-orbit-rect' : 'comp-orbit-rect'}
                             x="0"
                             y="0"
                             width="100%"
