@@ -8,8 +8,8 @@
   --panel: #fcfefc;
   --panel-2: #edf4ee;
   --line: #d8e5db;
-  --card-hover-bg: #f0f8f1;
-  --card-hover-border: #c8ded0;
+  --card-hover-bg: color-mix(in srgb, var(--brand-plum) 4%, var(--panel));
+  --card-hover-border: color-mix(in srgb, var(--brand-plum) 15%, var(--line));
   --text: #202522;
   --muted: #58645b;
   --muted-2: #819087;
@@ -44,8 +44,8 @@ html[data-theme="dark"] {
   --panel: #1b211d;
   --panel-2: #242c26;
   --line: #354239;
-  --card-hover-bg: #242c26;
-  --card-hover-border: #46574a;
+  --card-hover-bg: color-mix(in srgb, var(--brand-plum) 12%, var(--panel));
+  --card-hover-border: color-mix(in srgb, var(--brand-plum) 22%, var(--line));
   --text: #edf3ee;
   --muted: #a1ada4;
   --muted-2: #7d8b81;
