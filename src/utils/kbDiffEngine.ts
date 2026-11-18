@@ -66,7 +66,7 @@ export function computeKBDryRun(
     currentTabsMap.forEach((oldTab, key) => {
       if (!newTabsMap.has(key)) {
         missingTabs.push(oldTab.name);
-        confirmationWarnings.push(`Tab "${oldTab.name}" exists in active KB but is MISSING from the uploaded workbook.`);
+        confirmationWarnings.push(`The uploaded file is missing the "${oldTab.name}" sheet. Publishing will remove it.`);
       }
     });
   }
@@ -171,7 +171,7 @@ export function computeKBDryRun(
       // Check for large decrease in this tab (>25% reduction)
       if (oldRecords.length > 5 && newRecords.length < oldRecords.length * 0.75) {
         confirmationWarnings.push(
-          `Tab "${newTab.name}" decreased by ${oldRecords.length - newRecords.length} records (${Math.round((1 - newRecords.length / oldRecords.length) * 100)}% drop).`
+          `"${newTab.name}" has ${newRecords.length} cases, down from ${oldRecords.length} (${Math.round((1 - newRecords.length / oldRecords.length) * 100)}% fewer).`
         );
       }
     }
@@ -200,7 +200,7 @@ export function computeKBDryRun(
   if (!isSampleActive && totalRecordsBefore > 10 && totalRecordsAfter < totalRecordsBefore * 0.8) {
     largeDecreaseDetected = true;
     confirmationWarnings.push(
-      `Overall KB record count dropped from ${totalRecordsBefore} to ${totalRecordsAfter} (${Math.round((1 - totalRecordsAfter / totalRecordsBefore) * 100)}% reduction).`
+      `The file has ${totalRecordsAfter} cases, down from ${totalRecordsBefore} (${Math.round((1 - totalRecordsAfter / totalRecordsBefore) * 100)}% fewer).`
     );
   }
 

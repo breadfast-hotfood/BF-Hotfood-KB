@@ -8,7 +8,6 @@ import { useBackdropClose } from '../utils/backdropClose';
 import { orderVersions, visibleVersions, deletableVersions, isDeletable, canRollback } from '../utils/versionList';
 import { BlockedEmailsTab } from './BlockedEmailsTab';
 import { RulesSelfTestPanel } from './RulesSelfTestPanel';
-import { MAIN_ADMIN_EMAIL } from '../utils/accessPayloads';
 
 interface AdminPanelProps {
   currentUser: AuthUser;
@@ -208,7 +207,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       const data = await res.json();
       if (res.ok) {
-        onShowToast(`Successfully published ${data.fileName} (${data.totalRecords} records across ${data.totalTabs} sheets in ${data.totalChunks} chunks)`);
+        onShowToast(`Published ${data.fileName}: ${data.totalRecords} records across ${data.totalTabs} sheets.`);
         setSelectedFile(null);
         setParsedWorkbook(null);
         setDryRunReport(null);
@@ -244,7 +243,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       alert('That version is already the active version.');
       return;
     }
-    if (!confirm(`Are you sure you want to rollback to version ${targetVersionId}?`)) return;
+    if (!confirm(`Restore version ${targetVersionId} and make it current?`)) return;
 
     setRollingBackId(targetVersionId);
     try {
@@ -262,7 +261,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
       const data = await res.json();
       if (res.ok) {
-        onShowToast(`Rolled back to ${data.fileName}`);
+        onShowToast(`Restored ${data.fileName} as the current version.`);
         fetchVersions();
         const activeRes = await fetch('/api/kb/active', {
           headers: { Authorization: `Bearer ${token}` },
@@ -277,10 +276,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           }
         }
       } else {
-        alert(data.error || 'Rollback failed.');
+        alert(data.error || 'Could not restore this version.');
       }
     } catch (e: any) {
-      alert(`Error during rollback: ${e.message}`);
+      alert(`Could not restore this version: ${e.message}`);
     } finally {
       setRollingBackId(null);
     }
@@ -398,7 +397,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               }`}
             >
               <FileSpreadsheet className="w-3.5 h-3.5" />
-              <span>KB Ingestion & Dry-Run</span>
+              <span>Knowledge Base</span>
             </button>
             <button
               onClick={() => setActiveTab('admins')}
@@ -475,13 +474,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             {activeTab === 'overview' && (
               <div className="space-y-4 text-xs">
                 <div className="bg-[var(--panel-2)] border border-[var(--line)] rounded-xl p-4">
-                  <h4 className="font-bold text-sm text-[var(--text)] mb-2">Breadfast Company Access Model</h4>
+                  <h4 className="font-bold text-sm text-[var(--text)] mb-2">Who can access the Knowledge Base?</h4>
                   <ul className="list-disc list-inside space-y-1.5 text-[var(--muted)] leading-relaxed">
-                    <li><strong>All @breadfast.com Accounts:</strong> Any employee with a verified company Google email can sign in and read the Knowledge Base. No per-user import or allowlist is required.</li>
-                    <li><strong>Main Admin:</strong> Permanently anchored in security rules to <code>{MAIN_ADMIN_EMAIL}</code> (immutable). Can manage KB, grant/revoke Admins, and block company emails.</li>
-                    <li><strong>Administrators:</strong> Granted company users (with an <code>admins/&#123;email&#125;</code> record). Can publish/rollback KB, view signed-in members, and grant/revoke other Admins.</li>
-                    <li><strong>Offboarding (Blocked):</strong> The Main Admin can block departed employee accounts in <code>blocked/&#123;email&#125;</code>, cutting off access immediately.</li>
-                    <li><strong>External Accounts:</strong> All non-company Google accounts (and other @gmail.com accounts) are strictly denied by Firestore security rules.</li>
+                    <li><strong>Employees:</strong> Anyone with a verified @breadfast.com Google account can sign in and read the Knowledge Base. No individual approval is needed unless the account is blocked.</li>
+                    <li><strong>Main Admin:</strong> This account cannot be removed. It can manage the Knowledge Base, add or remove admins, and block employee accounts.</li>
+                    <li><strong>Admins:</strong> Employees given admin access can publish or restore versions, see who has signed in, and manage other admins.</li>
+                    <li><strong>Leaving the company:</strong> The Main Admin can block a former employee's account to stop access immediately.</li>
+                    <li><strong>Other accounts:</strong> Personal Gmail and other non-company accounts cannot sign in.</li>
                   </ul>
                 </div>
               </div>
@@ -490,14 +489,14 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             {/* KB Ingestion, Dry-Run & Version Management */}
             {activeTab === 'kb-manage' && (
               <div className="space-y-4">
-                {/* Step 1: File Selection & Instant Browser-Side Parse */}
+                {/* Step 1: Choose and review the updated file */}
                 <div className="bg-[var(--panel-2)] border border-[var(--line)] rounded-xl p-4 space-y-3">
                   <div className="flex items-center gap-2">
                     <Upload className="w-4 h-4 text-[var(--accent)]" />
-                    <h4 className="text-xs font-bold text-[var(--text)]">Knowledge Base File Ingestion & Pre-Flight Review</h4>
+                    <h4 className="text-xs font-bold text-[var(--text)]">Update the Knowledge Base</h4>
                   </div>
                   <p className="text-xs text-[var(--muted)]">
-                    Upload an updated workbook (e.g. <code>Chatting_Team_KB.xlsx</code>). The file is parsed completely in the browser with <code>FileReader → Uint8Array → XLSX.read(data, &#123;type:'array'&#125;)</code>, generating an instant pre-flight dry-run review before sending anything to the server. Hidden columns in Excel files are omitted from the new version; CSV files do not retain hidden-column information.
+                    Choose your updated Excel or CSV file. We'll check it in your browser and show what will change before you publish. Hidden Excel columns won't be included. CSV files don't store hidden-column settings, so all CSV columns will be included.
                   </p>
 
                   <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-1">
@@ -506,18 +505,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       type="file"
                       accept=".xlsx,.xls,.csv"
                       onChange={handleFileSelect}
-                      className="text-xs file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-[var(--accent-dim)] file:text-[var(--accent-contrast)] hover:file:opacity-90"
+                      className="workbook-file-input text-xs"
                     />
                     {isAnalyzingDryRun && (
                       <span className="text-xs text-[var(--muted)] animate-pulse">
-                        Reading and computing dry-run diff in browser...
+                        Checking your file and preparing a preview...
                       </span>
                     )}
                   </div>
 
                   {!!parsedWorkbook?.hiddenColumnsOmitted?.length && (
                     <div className="p-3 bg-amber-50 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 rounded-lg text-xs space-y-1">
-                      <p className="font-bold text-amber-900 dark:text-amber-200">Hidden columns will be excluded from this upload:</p>
+                      <p className="font-bold text-amber-900 dark:text-amber-200">These hidden Excel columns won't be included:</p>
                       <ul className="list-disc pl-5 text-amber-800 dark:text-amber-300 space-y-0.5">
                         {parsedWorkbook.hiddenColumnsOmitted.map((column, idx) => (
                           <li key={`${column.sheetName}-${column.column}-${idx}`}>
@@ -525,7 +524,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           </li>
                         ))}
                       </ul>
-                      <p className="text-amber-800 dark:text-amber-300">This exclusion applies to cards, search, and the table in the newly published version. Review the dry-run before publishing.</p>
+                      <p className="text-amber-800 dark:text-amber-300">They won't appear in cards, search, or tables after publishing. Review the preview before you continue.</p>
                     </div>
                   )}
 
@@ -537,18 +536,18 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   )}
                 </div>
 
-                {/* Step 2: Dry-Run Diff Inspection Results Modal/Card */}
+                {/* Step 2: Review changes before publishing */}
                 {dryRunReport && (
                   <div className="bg-[var(--panel)] border-2 border-[var(--accent)]/40 rounded-xl p-4 space-y-3 shadow-md">
                     <div className="flex items-center justify-between border-b border-[var(--line)] pb-2.5">
                       <div className="flex items-center gap-2">
                         <FileSpreadsheet className="w-4 h-4 text-[var(--accent)]" />
                         <h4 className="text-xs font-extrabold text-[var(--text)]">
-                          Pre-Flight Dry-Run Inspection Report: {dryRunReport.fileName}
+                          Review changes: {dryRunReport.fileName}
                         </h4>
                       </div>
                       <span className="text-[10px] font-mono bg-[var(--accent-dim)] text-[var(--accent-contrast)] px-2 py-0.5 rounded font-bold">
-                        Browser Dry-Run (Non-Destructive)
+                        Preview only — not published
                       </span>
                     </div>
 
@@ -557,10 +556,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <div className="p-3 bg-[var(--accent-dim)] border border-[var(--accent)]/25 rounded-lg text-xs space-y-1">
                         <div className="flex items-center gap-2 font-bold text-[var(--accent-contrast)]">
                           <CheckCircle2 className="w-4 h-4 shrink-0 text-[var(--accent)]" />
-                          <span>Active KB: Sample data - not a published version</span>
+                          <span>You're currently using sample data.</span>
                         </div>
                         <p className="text-[var(--accent-contrast)] text-[11px] leading-relaxed">
-                          This import will publish your first official Knowledge Base version, replacing the initial sample data. No false drop or missing-tab warnings are raised against sample data.
+                          Publishing this file will create the first official Knowledge Base. The sample is only for demonstration, so warnings about removed sheets or cases don't apply.
                         </p>
                       </div>
                     ) : null}
@@ -594,7 +593,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <div className="p-3 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-800 rounded-lg text-xs space-y-2">
                         <div className="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-200">
                           <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
-                          <span>Explicit Confirmation Required (Anomalies / Missing Tabs Detected)</span>
+                          <span>Please review these changes before publishing</span>
                         </div>
                         <ul className="list-disc pl-5 text-amber-800 dark:text-amber-300 space-y-1 text-[11px]">
                           {dryRunReport.confirmationWarnings.map((w, idx) => (
@@ -608,7 +607,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             onChange={(e) => setExplicitConfirmationChecked(e.target.checked)}
                             className="rounded border-amber-400 text-[var(--accent)]"
                           />
-                          <span>I explicitly acknowledge and confirm publishing despite missing tabs / record count decrease.</span>
+                          <span>I understand that sheets or cases are missing, and still want to publish.</span>
                         </label>
                       </div>
                     )}
@@ -618,13 +617,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       <table className="w-full text-left">
                         <thead className="bg-[var(--panel-2)] text-[var(--muted-2)] font-mono text-[10px] uppercase sticky top-0">
                           <tr>
-                            <th className="p-2">Sheet / Tab</th>
-                            <th className="p-2 text-center">Before → After</th>
+                            <th className="p-2">Sheet</th>
+                            <th className="p-2 text-center">Cases before → after</th>
                             <th className="p-2 text-center text-[var(--green)]">Added</th>
                             <th className="p-2 text-center text-[var(--accent)]">Updated</th>
-                            <th className="p-2 text-center text-[var(--muted)]">Same</th>
+                            <th className="p-2 text-center text-[var(--muted)]">Unchanged</th>
                             <th className="p-2 text-center text-amber-500">Removed</th>
-                            <th className="p-2 text-center text-[var(--red)]">Rejected</th>
+                            <th className="p-2 text-center text-[var(--red)]">Not added</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-[var(--line)]">
@@ -671,13 +670,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         onClick={handleCancelDryRun}
                         className="btn ghost text-xs text-[var(--muted)] hover:text-[var(--text)]"
                       >
-                        Cancel & Discard Import (Leave Active KB Unchanged)
+                        Cancel
                       </button>
 
                       <div className="flex items-center gap-2">
                         {dryRunReport.requiresExplicitConfirmation && !explicitConfirmationChecked && (
                           <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
-                            ← Check confirmation box to enable
+                            ← Select the box above to continue
                           </span>
                         )}
                         <button
@@ -685,7 +684,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           disabled={isPublishing || (dryRunReport.requiresExplicitConfirmation && !explicitConfirmationChecked)}
                           className="btn primary text-xs !py-1.5 !px-4 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                         >
-                          {isPublishing ? 'Server Staging, Verifying & Activating...' : 'Publish Active Version (Server Authoritative)'}
+                          {isPublishing ? 'Publishing...' : 'Publish this version'}
                         </button>
                       </div>
                     </div>
@@ -698,10 +697,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div>
                       <h4 className="text-xs font-bold text-[var(--text)] flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-[var(--muted-2)]" />
-                        <span>Version History & Rollback</span>
+                        <span>Version History & Restore</span>
                       </h4>
                       <span className="text-[10px] text-[var(--muted-2)]">
-                        Each version verified with SHA-256 chunk checksums and safe UTF-8 limits (≤ 750 KiB/chunk).
+                        Saved versions are checked so you can safely restore them.
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
@@ -729,9 +728,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     <table className="w-full text-left">
                       <thead className="bg-[var(--panel-2)] text-[var(--muted-2)] font-mono text-[10px] uppercase">
                         <tr>
-                          <th className="p-2.5">Version ID</th>
-                          <th className="p-2.5">File Name</th>
-                          <th className="p-2.5">Records / Sheets / Chunks</th>
+                          <th className="p-2.5">Version</th>
+                          <th className="p-2.5">File</th>
+                          <th className="p-2.5">Records / Sheets</th>
                           <th className="p-2.5">Status</th>
                           <th className="p-2.5 text-right">Actions</th>
                         </tr>
@@ -750,7 +749,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 {v.versionId}
                                 {(v.isDefault || v.isSample) && (
                                   <span className="ml-1.5 px-2 py-0.5 bg-[var(--accent-dim)] text-[var(--accent-contrast)] rounded text-[9px] font-semibold">
-                                    Sample data - not a published version
+                                    Sample data
                                   </span>
                                 )}
                                 {!(v.isDefault || v.isSample) && (
@@ -769,7 +768,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 {v.fileName}
                               </td>
                               <td className="p-2.5 text-[var(--muted)]">
-                                {v.totalRecords} records ({v.totalTabs} sheets, {v.totalChunks || 1} chunks)
+                                {v.totalRecords} records ({v.totalTabs} sheets)
                               </td>
                               <td className="p-2.5">
                                 <span className={`px-2 py-0.5 rounded text-[10px] font-semibold uppercase ${
@@ -793,9 +792,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                       onClick={() => handleRollback(v.versionId)}
                                       disabled={rollingBackId === v.versionId || deletingAll || deletingId !== null || !canRollback(v)}
                                       className="btn ghost text-[11px] !py-1 !px-2 text-[var(--accent-contrast)] font-semibold disabled:opacity-30"
-                                      title="Rollback active KB to this version"
+                                      title="Make this version current"
                                     >
-                                      {rollingBackId === v.versionId ? 'Rolling back...' : 'Rollback'}
+                                      {rollingBackId === v.versionId ? 'Restoring...' : 'Restore'}
                                     </button>
                                     {isDeletable(v) && (
                                       <button
